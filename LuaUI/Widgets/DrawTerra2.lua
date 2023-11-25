@@ -294,7 +294,7 @@ local s_dig_color = {0.9, 0.3,  0.3, 0.2}
 local s_cont_color = {0, 0.9, 0.9, 0.9}
 
 local scrollY=0
-local terraPrev_path = 'Settings/Interface/Building Placement/Terraform Previsualization'
+local terraPrev_path = 'Hel-K/Terraform Previsualization'
 
 
 ---------- DYNAMIC OPTION PANEL SYSTEM
@@ -424,7 +424,7 @@ end
 -------
 
 
-options_path = 'Hel-K/Building Placement'
+options_path = 'Settings/Interface/Building Placement'
 local hotkeys_path = 'Hotkeys/Construction'
 
 options_order = {
