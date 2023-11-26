@@ -15,6 +15,22 @@ function widget:GetInfo()
     }
 end
 local Echo = Spring.Echo
+
+local debugState = false
+options_path = 'Hel-K/' .. widget:GetInfo().name
+options_order = {'debug_state'}
+options = {}
+options.debug_state = {
+    name = 'Debug State',
+    type = 'bool',
+    value = debugState,
+    OnChange = function(self)
+        debugState = self.value
+    end,
+}
+
+
+
 local f = VFS.Include("LuaUI\\Widgets\\UtilsFunc.lua")
 VFS.Include('LuaUI\\Widgets\\Keycodes.lua')
 local Page = f.Page
@@ -394,61 +410,70 @@ local buttonTXT = {
 }
 function widget:DrawScreen()
     -- glColor(0,0.5,1)
-    local str = ''
-    for k,v in pairs(STATE) do
-        k = KEYCODES[k]
-        str = str .. k .. '=' .. v .. ', '
-    end
-    str = str:sub(1,-3)
-    glText(format(str), 60,height, 15)
 
     -- Debug verif mouse -- now working perfect, EXCEPT when switching to lobby and coming back
 
-    local str2, str3 = '', ''
     MouseState[1], MouseState[2], MouseState[3], MouseState[4], MouseState[5], MouseState[6] = spGetMouseState()
-    for k,v in ipairs(MouseState) do
-        
-        if k<3 then
-            k = k == 1 and 'x:' or 'z:'
-            str2 = str2 ..k .. '=' .. tostring(v) .. ', '
-        elseif k<6 then
-            local pressed = v
-            if mouse[k-2] ~= v then
-                v = tostring(v)
-                v = v .. ' WRONG'
-                Echo('WE GOT THE MOUSE WRONG !',k-2,v,math.round(os.clock()))
-            else 
-                v = tostring(v)
-            end     
-            k = buttonTXT[k-2]
-            str3 = str3 .. (pressed and (k .. '  ') or '         ')
+    if debugState then
+        local str = ''
+        for k,v in pairs(STATE) do
+            k = KEYCODES[k]
+            str = str .. k .. '=' .. v .. ', '
         end
-        
+        str = str:sub(1,-3)
+        glText(format(str), 60,height, 15)
+        local str2, str3 = '', ''
+        for k,v in ipairs(MouseState) do
+            
+            if k<3 then
+                k = k == 1 and 'x:' or 'z:'
+                str2 = str2 ..k .. '=' .. tostring(v) .. ', '
+            elseif k<6 then
+                local pressed = v
+                if mouse[k-2] ~= v then
+                    v = tostring(v)
+                    v = v .. ' WRONG'
+                    Echo('WE GOT THE MOUSE WRONG !',k-2,v,math.round(os.clock()))
+                else 
+                    v = tostring(v)
+                end     
+                k = buttonTXT[k-2]
+                str3 = str3 .. (pressed and (k .. '  ') or '         ')
+            end
+            
+        end
+        str2 = str2:sub(1,-3)
+        str3 = str3:sub(1,-3)
+        glText(format(str2), 60,height-18*1, 15)
+        glText(format(str3), 60,height-18*2, 15)
+        local owner
+        if  wh.mouseOwner then
+            owner = wh.mouseOwner.GetInfo().name
+        end
+        if mouseLocked or verifMouseState or owner then
+            -- if owner == 'Chili Framework' then
+            --     local above = WG.Chili.Screen0:IsAbove(MouseState[1], MouseState[2])
+            --     if above then
+            --         above = WG.Chili.Screen0.hoveredControl
+            --         if above then
+            --             owner = owner ..  ' ' ..(above.caption or above.name or above.className or '')
+            --         end
+            --     end
+            -- end
+            glText(  
+                (math.round(os.clock()) .. '     ' ) .. 'mm' .. mm .. (mouseLocked and 'locked  ' or '               ')
+                .. (verifMouseState and 'need verif ' or '                 ')
+                .. (owner or '') 
+                ,60,height-18*3, 15
+            )
+            glText(                (WG.drawingPlacement and 'drawingPlacement' or '                 '  )
+                .. (WG.EzSelecting and 'EzSelecting' or '                 '  )
+                .. (WG.panning and 'panning' or ''  )
+                ,60,height-18*4, 15
+            )
+        end
+        -- glColor(1,1,1)
     end
-    str2 = str2:sub(1,-3)
-    str3 = str3:sub(1,-3)
-    glText(format(str2), 60,height-18*1, 15)
-    glText(format(str3), 60,height-18*2, 15)
-    local owner
-    if  wh.mouseOwner then
-        owner = wh.mouseOwner.GetInfo().name
-    end
-    if mouseLocked or verifMouseState or owner then
-        -- if owner == 'Chili Framework' then
-        --     local above = WG.Chili.Screen0:IsAbove(MouseState[1], MouseState[2])
-        --     if above then
-        --         above = WG.Chili.Screen0.hoveredControl
-        --         if above then
-        --             owner = owner ..  ' ' ..(above.caption or above.name or above.className or '')
-        --         end
-        --     end
-        -- end
-        glText(  
-            (math.round(os.clock()) .. '     ' ) .. 'mm' .. mm .. (mouseLocked and 'locked  ' or '               ')
-            .. (verifMouseState and 'need verif ' or '                 ')
-            .. (owner or '') , 60,height-18*3, 15)
-    end
-    -- glColor(1,1,1)
 
 end
 
