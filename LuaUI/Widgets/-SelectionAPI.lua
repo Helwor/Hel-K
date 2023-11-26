@@ -166,7 +166,6 @@ end
 
 
 function widget:CommandsChanged()
-
     -- for k,v in pairs(customCmds) do
     --     Echo(k,v)
     -- end

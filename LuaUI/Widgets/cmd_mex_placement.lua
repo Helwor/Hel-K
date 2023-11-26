@@ -387,6 +387,7 @@ local function GetClosestMetalSpot(x, z) --is used by single mex placement, not 
 			bestIndex = i
 		end
 	end
+	-- Echo('best Index', bestIndex)
 	return bestSpot, sqrt(bestDist), bestIndex
 end
 

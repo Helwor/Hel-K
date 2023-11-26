@@ -1508,7 +1508,7 @@ local hotkeysCombos={
 			force=true,
 			from_cursor=true, -- get the closest of cursor
 			on_press = true,
-			previous_time=0.6,
+			previous_time=DOUBLETAP_THRESHOLD,
 			disable_SM=true,
 			call_on_fail = 'Sub'}, -- call this macro if nothing found
 			

@@ -40,6 +40,7 @@ local Echo = Spring.Echo
 local spGetGameSeconds = Spring.GetGameSeconds
 local spGetActiveCommand = Spring.GetActiveCommand
 local spGetMouseState = Spring.GetMouseState
+local spGetModKeyState   = Spring.GetModKeyState
 local osclock = os.clock
 local traceback = debug.traceback
 local concat = table.concat
@@ -188,7 +189,12 @@ do -- register history
     local time = osclock()
     local count = 0
     function Spring.SetActiveCommand(n)
-        local txt = concat({FormatTime(spGetGameSeconds()),n or 'nil',debug.traceback()}, '\n')
+        local shift = select(4,spGetModKeyState())
+        local txt = concat({FormatTime(spGetGameSeconds())
+            ,n or 'nil'
+            ,shift and 'shift is held' or 'no shift'
+            ,'current command : ' .. tostring(spGetActiveCommand())
+            ,debug.traceback()}, '\n')
         if count == 10 then
             table.remove(AComHistory,1)
         else

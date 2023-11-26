@@ -3375,7 +3375,12 @@ function PlacementModule:RecoverPID()
 	if E_SPEC[self.lastPID] then
 		WG.force_show_queue_grid = self.lastPID
 	end
+	local _,com,_,comname = sp.GetActiveCommand()
+	-- local com = select(2, sp.GetActiveCommand())
 	if select(2, sp.GetActiveCommand()) ~= -self.lastPID then
+		if com then
+			Echo('comname is ',comname,com, 'last pid is', self.lastPID )
+		end
 		local cmdIndex = self.lastPID and Spring.GetCmdDescIndex(-self.lastPID)
 		return cmdIndex and sp.SetActiveCommand(cmdIndex)
 	end
@@ -3400,17 +3405,21 @@ local function FinishDrawing(fixedMex)
 		return
 	elseif status=='engaged' then
 		-- finish correctly, ordering
-		 p:RecoverPID()
+		if shift then
+		 	p:RecoverPID()
+		 else
+		 	status ='none'
+		 end
 		-- if Debug and WG.PBHisListening then Echo('DP release and catch PBH') end
 		if specs[1] then
 			SendCommand(PID)
 			-- NOTE: when using Alt, it happens the active command get reset by some widget at CommandNotify stage
 			-- so we redo it
-			if alt then
+			if alt  and shift then
 				p:RecoverPID()
 			end
 		elseif (not prev.pos or prev.pos[1]==pointX and prev.pos[3]==pointZ) then
-			if false and (Cam.dist or  GetCameraHeight(sp.GetCameraState()))<2700 then -- zoomed in enough, we allow erasing placement
+			if false and (Cam.relDist or  GetCameraHeight(sp.GetCameraState()))<2700 then -- zoomed in enough, we allow erasing placement
 				EraseOverlap(pointX,pointZ)
 			elseif WG.FindPlacementAround then -- if zoomed out and PBH is active, we look for a placement around
 				if not pointX then
@@ -3523,9 +3532,13 @@ function widget:Update(dt)
 	if status=='none' then
 		local acom = select(2,sp.GetActiveCommand())
 		if acom and acom < 0 then
-			sp.SetActiveCommand(-1)
+			if not widgetHandler.mouseOwner then
+				sp.SetActiveCommand(-1)
+				reset(true)
+				return
+			end
 		end
-		reset(true)
+		reset()
 		return
 	end
 
@@ -4184,7 +4197,7 @@ function widget:MouseMove(x, y, dx, dy, button)
 	-- 	return
 	-- end
 	-- if not Drawing --[[and not (warpBack=="ready")--]] then	return	end
-	if prev.firstmx and (math.abs(prev.firstmx - x) < 15 and math.abs(prev.firstmy - y) < 15) then -- mouse leeway
+	if prev.firstmx and (PID ~= mexDefID and  (math.abs(prev.firstmx - x) < 20 and math.abs(prev.firstmy - y) < 20)) then -- mouse leeway
 		return
 	end
 	prev.firstmx = false

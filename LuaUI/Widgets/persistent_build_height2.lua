@@ -492,7 +492,7 @@ local function CheckGeos(px,pz)
     local _px, _pz = px,pz
     local spot
     if spTestBuildOrder(geoDefID, px, 0, pz, 0)==0 then
-        local geoX,_,geoZ = spClosestBuildPos(0,PID, px, 0, pz, 600 ,0 ,0)
+        local geoX,_,geoZ = spClosestBuildPos(0,geoDefID, px, 0, pz, 600 ,0 ,0)
         if geoX>-1 then
             px,pz = geoX,geoZ
             spot = geos.map[geoX] and geos.map[geoX][geoZ]
@@ -1613,7 +1613,7 @@ local function CreateTerra(cl, unitID)
     -- addTerraUnit = true
     local terraSizeX,terraSizeZ=p.terraSizeX,p.terraSizeZ
     if cl and cl.facing and cl.facing~=p.facing and mod(p.facing,2)~=mod(cl.facing,2) then terraSizeX,terraSizeZ = p.terraSizeZ,p.terraSizeX end
-    return groundModule:SetTerraforming(cons, myTeamID, pointX, pointY, pointZ, terraSizeX, terraSizeX)
+    return groundModule:SetTerraforming(cons, myTeamID, pointX, pointY, pointZ, terraSizeX, terraSizeZ)
 
 end
 
@@ -1986,8 +1986,11 @@ function widget:CommandNotify(id, params, opts)
         -- Echo('delayed order',#delayedOrders)
         -- return
     end
-    -- alt, ctrl, meta, shift = spGetModKeyState()
+    local _alt, _ctrl, _meta, _shift = spGetModKeyState()
     alt, ctrl, meta, shift = opts.alt, opts.ctrl, opts.meta, opts.shift
+    if not shift and _shift then
+        Echo('got shift !')
+    end
     local doMex 
 
     if id == -mexDefID then
@@ -2878,7 +2881,6 @@ function widget:MousePress(mx, my, button)
     -- Echo("MP in BPH",os.clock())
     -- Echo("meta and PID is ", meta and PID, meta and PID and ordered)
     alt, ctrl, meta, shift = spGetModKeyState()
-
     if button == 1 then
         leftClick = true
     elseif button == 3 then
@@ -3023,7 +3025,8 @@ function widget:MousePress(mx, my, button)
                 return true
             elseif canBuild and not mustTerraform then
                 if DP and not shift then
-                    widgetHandler:CommandNotify(-PID,{pointX,pointY,pointZ,p.facing},MakeOptions())
+                    -- widgetHandler:CommandNotify(-PID,{pointX,pointY,pointZ,p.facing},MakeOptions())
+
                     return true
                 else
                     ignoreFirst = true
@@ -3037,6 +3040,18 @@ function widget:MousePress(mx, my, button)
     end
 end
 function widget:MouseRelease(mx,my,button)
+        if pointX and PID then
+            local order = {pointX,pointZ,pid = PID}
+            -- Echo('here',os.clock(),'shift?',select(4,spGetModKeyState()),'pid?',PID,spGetActiveCommand())
+            table.insert(WG.commandLot, order)
+            ordered=true
+
+            if not select(4,spGetModKeyState()) then
+                spSetActiveCommand(0)
+            end
+        end
+        return -1
+    -- Echo('release','shift?',select(4,spGetModKeyState()))
     -- if CI_Disabled then
     --     -- CI_Disabled=false
     --     -- widgetHandler:UpdateWidgetCallIn("CommandNotify", CI)

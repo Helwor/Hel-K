@@ -206,7 +206,7 @@ local PreSelection_GetUnitsInSelectionBox = function ()
 			else
 				units = Spring.GetTeamUnits(myTeamID)
 			end
-
+			local n = 0
 			for i=1, #units do
 				local uvx, uvy, uvz = Spring.GetUnitViewPosition(units[i], true)
 				if uvz then
@@ -214,12 +214,13 @@ local PreSelection_GetUnitsInSelectionBox = function ()
 					local hereMouseX, hereMouseY = x, y
 					if ux and not Spring.GetUnitNoSelect(units[i]) then
 						if ux >= math_min(screenStartX, hereMouseX) and ux < math_max(screenStartX, hereMouseX) and uy >= math_min(screenStartY, hereMouseY) and uy < math_max(screenStartY, hereMouseY) then
-							allBoxedUnits[#allBoxedUnits+1] = units[i]
+							n = n +1
+							allBoxedUnits[n] = units[i]
 						end
 					end
 				end
 			end
-			if #allBoxedUnits > 0 then
+			if n > 0 then
 				return (WG.SelectionRank_GetFilteredSelection and WG.SelectionRank_GetFilteredSelection(allBoxedUnits)) or allBoxedUnits
 			else
 				return nil
