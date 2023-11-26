@@ -1899,6 +1899,7 @@ local hotkeysCombos={
 				longPressTime = 0.15, -- longPress is evaluated true within 0.2 sec, very swiftly
 				color={0.2, 0.5, 1, 0.99},
 				fading=0.5,
+				-- force_finish = true, -- achieve 'One Commando' call before starting this one
 				same_units=true,
 				share_radius = 'One Commando',
 			},
@@ -3992,6 +3993,11 @@ local function FinishCall(selecting)
 	--- extra calls
 	if success and last.call.force_finish then
 		widget:CommandsChanged()
+		local selAPI = widgetHandler:FindWidget('Selection API')
+		if selAPI then
+			selAPI:CommandsChanged() -- update immediately the WG.selectionDefID
+		end
+		
 	end
 	if jumpCall then
 		g.hkCombo=jumpCall
@@ -7903,7 +7909,6 @@ end
 
 
 	function widget:CommandsChanged(force)
-
 		--Echo("round(clock()*10)-lastTime is ", round(clock()*10)-lastTime)
 		-- chk('reset')
 		-- local lastCall = last.call
