@@ -831,7 +831,7 @@ local function Evaluate(type, id, engineCmd)
         v.moddedActiveCommand = false
         spSetActiveCommand(0)
     end
-    if ctrl then
+    if ctrl and engineCmd~= CMD_RECLAIM then -- ctrl + move with a con will not reclaim
         return v.cmdOverride
     end
     if not (v.moddedCmd)  then
