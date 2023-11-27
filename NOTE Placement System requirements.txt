@@ -46,8 +46,8 @@ ideally engine would require to accept some mod with CMD_INSERT to calculate its
 
 MoveAwayFromLevelBuild.lua
 this widget need extra:
-	-command_tracker.lua
-	-UnitsIDCard 
+	command_tracker.lua
+	UnitsIDCard 
 	-AddSleepWake
 the con move away from an elevated build he would step on (spire included)
 
