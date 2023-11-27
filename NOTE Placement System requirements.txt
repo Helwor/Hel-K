@@ -44,7 +44,11 @@ NOTE: not perfectly working as it is a guess and can be resource hungry with man
 ideally engine would require to accept some mod with CMD_INSERT to calculate itself the best position according to received orders
 
 
-MoveAwayFromLevelBuild.lua (widget stand alone)
+MoveAwayFromLevelBuild.lua
+this widget need extra:
+	-command_tracker.lua
+	-UnitsIDCard 
+	-AddSleepWake
 the con move away from an elevated build he would step on (spire included)
 
 FixAlreadyBuiltInQueue.lua (widget stand alone)
