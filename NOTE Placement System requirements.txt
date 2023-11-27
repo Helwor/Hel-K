@@ -1,0 +1,70 @@
+What's needed to fully use the placement system (afaik)
+
+UtilsFunc.lua
+bunch of useful funcs
+
+gui_show_eco_action.lua (modified vanilla)
+add the possibility to show grid and current build radius without having the build command active (draw placement remove the command build during placement)
+
+cmd_mex_placement.lua (modified vanilla)
+allow to work better in coordination of the placement system, add option for removing the right click mex on metal spot (preferable but EzTarget.lua come into play to have a move order instead, EzTarget is not stand alone and might be explained on another note)
+
+unit_initial_queue.lua (modified vanilla)
+needed to manage pregame build placement (auto terraform included)
+
+cmd_factory_plate_placer.lua (modified vanilla)
+needed for allowing to shift order plate on a factory that is not yet build but just placed
+
+cmd_hold_ctrl_to_place_and_morph.lua (modified vanilla)
+allow insert order to work aswell for auto morph
+(insert order is needed to force the engine to accept a build order on unfit terrain)
+
+persistent_build_height2.lua
+main terraform and elevation UI handler, lots of features you will discover
+(you need to deactivate vanilla gui_persistent_build_height.lua)
+
+draw_placements.lua
+handling free handed placement drawing, build controls, lots of features to discover
+
+DrawTerra2.lua
+only handling the previsualization and can be deactivated, many options
+
+-HasViewChanged.lua (API) managing viewable units, camera specs ...
+
+-OnWidgetState (API) calls widgets that want it, to know which widget has been initialized/shutdown...
+
+other camera mode than TA or COFC is not supported (but might work idk, also rotation in COFC has never been tested)
+
+-- EXTRA
+
+cmd_commandinsert2.lua (widget stand alone)
+allow rapid/multi insertion via a virtual queue system (optionnable, but default options are best so far and work for sure)
+auto disable the vanilla cmd_commandinsert.lua and can be switched back in option
+NOTE: not perfectly working as it is a guess and can be resource hungry with many cons having many orders,
+ideally engine would require to accept some mod with CMD_INSERT to calculate itself the best position according to received orders
+
+
+MoveAwayFromLevelBuild.lua (widget stand alone)
+the con move away from an elevated build he would step on (spire included)
+
+FixAlreadyBuiltInQueue.lua (widget stand alone)
+the con skip a  next build order already achieved whenever he finish a current order
+
+StopReclaim.lua (widget stand alone)
+ordering a con to stop when he just started a build will order him to reclaim it (optionnable)
+
+StriderHubAlt.lua (widget stand alone but can use -SelectionAPI.lua)
+allow the alt key to work for athenas and strider hub as it work with factory (if strider hub is on repeat, order build with alt make it a one time build) 
+(working for athena is optionnable as it would then conflict the alt modkey for placing build)
+allow the stop production action for athenas and strider hub to work as it work for factory 
+
+terra_unit_handler2.lua (widget stand_alone)
+auto delete terra unit when the corresponding elevated build has been cancelled by user (not working in every situation, has yet to debug that)
+
+gui_persistent_build_spacing.lua (replacing the vanilla one)
+my original build spacer, the vanilla is mine but not has been fully accepted
+
+PS: many of annexes and work arounds was needed to compensate for the lack of engine featured tools and callins
+
+
+
