@@ -206,6 +206,12 @@ function widget:Initialize()
         widgetHandler:RemoveWidget(self)
         return
     end
+    CommandTracker = widgetHandler:FindWidget('Command Tracker')
+    if not CommandTracker then
+        Echo('Command Tracker is required for ' .. widget:GetInfo().name)
+        widgetHandler:RemoveWidget(self)
+        return
+    end
     -- if not WG.Dependancies:Require(widget,'Command Tracker',true) then
     --     Echo(widget:GetInfo().name .. " don't have command tracker")
     --     widgetHandler:RemoveWidget(self)
@@ -215,7 +221,7 @@ function widget:Initialize()
     MyNewTeamID(Spring.GetMyTeamID())
 
     trackedUnits = WG.TrackedUnits
-    CommandTracker = widgetHandler:FindWidget('Command Tracker')
+
     CommandTracker.callbacksExec[widget:GetInfo().name] = NotifyExecute
     CommandTracker.callbacksIdle[widget:GetInfo().name] = NotifyIdle
     Units = WG.UnitsIDCard

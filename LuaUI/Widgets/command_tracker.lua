@@ -511,12 +511,12 @@ function widget:Update()
                     if before.id == CMD_REPAIR then
                         spGiveOrderToUnit(CMD_REMOVE,unitID, before.tag,0)
                         -- if debugSel then
-                            Echo('remove repair order from update')
+                            Debug.autoguard('remove repair order from update')
                         -- end
                     elseif before.id == CMD_RAW_MOVE  then
                         spGiveOrderToUnit(CMD_REMOVE,unitID, before.tag,0)
                         -- if debugSel then
-                            Echo('remove raw move order from update')
+                            Debug.autoguard('remove raw move order from update')
                         -- end
                     end
                 end
@@ -1232,7 +1232,8 @@ function widget:Initialize()
         widgetHandler:RemoveWidget(self)
         return
     end
-    if not WG.UnitsIDCard and WG.UnitsIDCard.active then
+    if not (WG.UnitsIDCard and WG.UnitsIDCard.active) then
+        Echo('Command Tracker requires UnitsIDCard')
         widgetHandler:RemoveWidget(self)
         return
     end        
