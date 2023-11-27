@@ -22,8 +22,8 @@ local debugMe = false
 local debugDraw = false
 local noInsertBeforeCurrentBuild = true
 local useBuffer = false
-local correctAfter = true
-local reorderSequence = true
+local correctAfter = false
+local reorderSequence = false
 --
 
 
