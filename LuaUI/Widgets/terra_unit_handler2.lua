@@ -17,9 +17,9 @@ end
 --------------------------------------------------------------------------------
 -- Speedups
 --------------------------------------------------------------------------------
-local f = VFS.Include("LuaUI\\Widgets\\UtilsFunc.lua")
+-- local f = VFS.Include("LuaUI\\Widgets\\UtilsFunc.lua")
 
-local Page                              = f.Page
+-- local Page                              = f.Page
 
 
 local Echo                      = Spring.Echo
@@ -66,6 +66,13 @@ local getLevelTags = false
 
 local currentTerra = false
 
+function table.size(t)
+    local count = 0
+    for _ in pairs(t) do
+        count = count + 1
+    end
+    return count
+end
 
 local function New(terraID)
     Debug('NEW terras',terraID)
@@ -164,7 +171,7 @@ function widget:UnitCommand(conID, defID, teamID, cmd, cmdParams, opts, cmdTag, 
             terra.builders[conID]=true
             builders[conID][terra]=true
         end
-        Debug('terra '..terraID..' has now '..f.l(terra.builders)..' builders')
+        Debug('terra '..terraID..' has now '..table.size(terra.builders)..' builders')
         --
         repairing[conID]=terras[terraID]
         return
@@ -317,4 +324,4 @@ function widget:Initialize()
     widget:CommandsChanged()
 end
 
-f.DebugWidget(widget)
+-- f.DebugWidget(widget)

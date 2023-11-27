@@ -20,13 +20,30 @@ local athenaDefID 		= UnitDefNames['athena'].id
 
 local spGiveOrderToUnit = Spring.GiveOrderToUnit
 local spGetCommandQueue = Spring.GetCommandQueue
+local spGetSelectedUnitsSorted = Spring.GetSelectedUnitsSorted
 local CMD_REMOVE = CMD.REMOVE
-
 
 local selectionDefID
 
+local includeAthenaAlt = true
+
+options_order = {'include_athena_alt'}
+options_path = 'Hel-K/' .. widget:GetInfo().name
+options = {}
+options.include_athena_alt = {
+	type = 'bool',
+	name = 'Include alt mod key for Athena',
+	value = includeAthenaAlt,
+	OnChange = function(self)
+		includeAthenaAlt = self.value
+	end,
+}
+
+
+
 function widget:TextCommand(txt)
 	if txt == 'stopproduction' then
+		local selectionDefID = selectionDefID or spGetSelectedUnitsSorted()
 		local athenas = selectionDefID[athenaDefID]
 		local striderHubs = selectionDefID[striderHubDefID]
 		if athenas then
@@ -57,7 +74,7 @@ function widget:UnitCmdDone(unitID,defID,teamID,cmd,params,opts)
 	if cmd > 0 then 
 		return
 	end
-	if defID ~= striderHubDefID and defID ~= athenaDefID then
+	if defID ~= striderHubDefID and (not includeAthenaAlt or defID ~= athenaDefID) then
 		return
 	end
 	if not opts.alt then

@@ -68,7 +68,7 @@ options.timeout = {
 	min = 0.1,
 	max = 30,
 	step = 0.1,
-	value = 1,
+	value = TIMEOUT,
 	OnChange = function(self)
 		TIMEOUT = self.value
 	end,

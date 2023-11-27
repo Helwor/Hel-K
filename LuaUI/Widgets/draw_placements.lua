@@ -965,7 +965,7 @@ do
 			-- z = floor((z + 8 - p.oddZ)/16)*16 + p.oddZ
 		end
 	    local sx,sz = p.terraSizeX, p.terraSizeZ
-	    local viewHeight = Cam and Cam.dist or GetCameraHeight(sp.GetCameraState())
+	    local viewHeight = Cam and Cam.relDist or GetCameraHeight(sp.GetCameraState())
 	    local factor = 1
 	    if viewHeight>2500 then
 	    	factor = 1+(viewHeight-2500)/2500
@@ -1190,8 +1190,11 @@ do
 	GoStraight = function(on,x,z,railLength)
 		start = rail[start_r] and rail[start_r].straight and rail[start_r] 
 		if not on then
-			if start then g.unStraightened,locked = clock(),clock() end
-			start, cur_dir, start_r = nil, nil,nil --[[Echo('return normal')--]] return false,locked,x,z,railLength
+			if start then 
+				g.unStraightened,locked = clock(),clock()
+			end
+			start, cur_dir, start_r = nil, nil,nil --[[Echo('return normal')--]]
+			return false,locked,x,z,railLength
 		else
 			g.unStraightened = false
 		end
@@ -4325,7 +4328,7 @@ function widget:MouseMove(x, y, dx, dy, button)
 
 			if not rail[railLength] then error("No Rail Length") end
 			local x,y,z = unpack(rail[railLength])
-			local factor = Cam and Cam.dist or GetCameraHeight(sp.GetCameraState())
+			local factor = Cam and Cam.relDist or GetCameraHeight(sp.GetCameraState())
 			local llasP, llasPx,llasPz, llasP_To_Cur = specs[specsLength-1]
 			if llasP then
 				llasPx,llasPz = llasP[1],llasP[2]
@@ -4363,7 +4366,7 @@ function widget:MouseMove(x, y, dx, dy, button)
 				--local fact = GetCameraHeight(sp.GetCameraState())/1000 -- more tolerance as more zoomed out
 				--local fact = sp.GetBuildSpacing()
 				--local fact = sp.GetBuildSpacing() + GetCameraHeight(sp.GetCameraState())/1000
-				local fact = (Cam and Cam.dist or GetCameraHeight(sp.GetCameraState()))/1000 --* sp.GetBuildSpacing() / 3
+				local fact = (Cam and Cam.relDist or GetCameraHeight(sp.GetCameraState()))/1000 --* sp.GetBuildSpacing() / 3
 				-- Echo('---st')
 				if not lasR.mex then
 					for i=railLength-1, railLength-(7+fact)+(lasR.straight and 5 or 0)+(lasR.mex and 10 or 0), -1 do
@@ -4948,7 +4951,7 @@ do
 end
 
 
-function DPCallin(self) -- homemade callin
+function DPCallin(self) -- homemade callin -- not used anymore
     Echo("TRIGGERED2", self.value)
 end
 function widget:GameFrame(gf)

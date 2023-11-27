@@ -2901,6 +2901,15 @@ end
 
 	return one,checked>=#args,list
 end--]]
+
+function table.size(t)
+    local count = 0
+    for _ in pairs(t) do
+        count = count + 1
+    end
+    return count
+end
+
 function table.getkelems(T,Ti) -- extract listed elements (table Ti) from T
 	local newt={}
 	for k in pairs(Ti) do

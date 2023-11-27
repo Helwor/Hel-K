@@ -142,7 +142,7 @@ local opt = {
     findPlatform = true
 }
 
-local dbg_options_path = 'Hel-K/PBH2'
+local dbg_options_path = 'Hel-K/' .. widget:GetInfo().name
 ------------- DEBUG CONFIG
 local Debug = { -- default values
     active = false, -- no debug, no other hotkey active without this
@@ -189,7 +189,7 @@ end
 ---------------------------------
 --local commandPanelPath = 'Hotkeys/Command Panel'
 --local customGridPath = 'Hotkeys/Command Panel/Custom'
-local helkpath = 'Hel-K/PBH2'
+local helkpath = 'Hel-K/' .. widget:GetInfo().name
 local hotkeyPath = "Hotkeys/Construction"
 options_path = 'Settings/Interface/Building Placement'
 options_order = {   
