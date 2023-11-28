@@ -2451,6 +2451,11 @@ local function PoseSpecialOnRail()
 
 		if status == 'connect' then
 			irail.color = color.teal
+			for k in pairs(newgrids) do
+				if k:match('m') then
+					irail.conectMex = true
+				end
+			end
 		elseif status == 'disconnect' then
 			irail.color = color.purple
 		end
@@ -4382,7 +4387,7 @@ function widget:MouseMove(x, y, dx, dy, button)
 				--local fact = sp.GetBuildSpacing() + GetCameraHeight(sp.GetCameraState())/1000
 				local fact = (Cam and Cam.relDist or GetCameraHeight(sp.GetCameraState()))/1000 --* sp.GetBuildSpacing() / 3
 				-- Echo('---st')
-				if not lasR.mex then
+				if not (lasR.mex or lasR.connectMex) then
 					for i=railLength-1, railLength-(7+fact)+(lasR.straight and 5 or 0)+(lasR.mex and 10 or 0), -1 do
 						local ri = rail[i]
 						if ri then
