@@ -831,6 +831,8 @@ do
 			end
 			ReorderClosest(total,nspec,n,cons[1])
 		end
+		local opts = f.MakeOptions(nil, true)
+		local shift = true
 		if status=='paint_farm' then
 			local spread = FARM_SPREAD[PID]
 			local toReorder = (not spread and 4) or (spread - spread%2 + 1)^2
@@ -850,7 +852,6 @@ do
 
 		if PBH then -- Let PersistentBuildHeight do the job
 			if PID == mexDefID then
-				local opts = f.MakeOptions()
 				local done
 				for i,p in ipairs(total) do
 					done = PBH:CommandNotify(-mexDefID, {p[1],sp.GetGroundHeight(p[1],p[2]), p[2],1},opts) or done
@@ -871,7 +872,7 @@ do
             if IQ then 
                 -- hijacking CommandNotify of widget Initial Queue ZK, for it to take into consideration pre Game placement on unbuildable terrain
                 for i,b in ipairs(total) do
-                	IQ:CommandNotify(b.mex and -mexDefID or -PID,{b[1],GetGround(b[1],b[2]),b[2]},{alt=alt,ctrl=ctrl,shift=shift,meta=meta})
+                	IQ:CommandNotify(b.mex and -mexDefID or -PID,{b[1],GetGround(b[1],b[2]),b[2]},opts)
                 end
             end
             return
@@ -3530,17 +3531,22 @@ function widget:Update(dt)
 	end
 	--if PID==mexDefID and not shift then sp.SetActiveCommand(-1) end
 	if status=='engaged' and not (shift or ctrl) then
-		status='none'
+		if not specs[1] then
+			status='none'
+		end
 	end
+
 	if status=='none' then
 		local acom = select(2,sp.GetActiveCommand())
-		if acom and acom < 0 then
+		if acom and acom < 0 and PID == -acom then
 			if not widgetHandler.mouseOwner then
 				sp.SetActiveCommand(-1)
 				reset(true)
 				return
 			end
 		end
+		WG.showeco = g.old_showeco
+		WG.force_show_queue_grid = false
 		reset()
 		return
 	end
@@ -3669,12 +3675,14 @@ function widget:KeyRelease(key, mods)
 		GoStraight(alt)
 	end
 	if (status=='engaged' or status=='erasing') and not (shift or ctrl) then
-		status='none'
-		sp.SetActiveCommand(-1)
-		reset()
-		PID=false
-		WG.showeco = g.old_showeco
-		WG.force_show_queue_grid = false
+		if not specs[1] then
+			status='none'
+			sp.SetActiveCommand(-1)
+			reset()
+			PID=false
+			WG.showeco = g.old_showeco
+			WG.force_show_queue_grid = false
+		end
 		return
 	end
 
@@ -4200,8 +4208,14 @@ function widget:MouseMove(x, y, dx, dy, button)
 	-- 	return
 	-- end
 	-- if not Drawing --[[and not (warpBack=="ready")--]] then	return	end
-	if prev.firstmx and (PID ~= mexDefID and  (math.abs(prev.firstmx - x) < 20 and math.abs(prev.firstmy - y) < 20)) then -- mouse leeway
-		return
+	if prev.firstmx and (PID ~= mexDefID) then
+		if clock() - prev.press_time < 0.09 then -- mouse click leeway
+			-- Echo("clock() - prev.press_time is ", clock() - prev.press_time)
+			return
+		end
+		if  ((prev.firstmx - x)^2 + (prev.firstmy - y)^2) ^0.5 < 20 then -- mouse move leeway
+			return
+		end
 	end
 	prev.firstmx = false
 	if status=='erasing' then

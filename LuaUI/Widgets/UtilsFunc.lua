@@ -6259,9 +6259,10 @@ do
 	    	return signedIn[round(coded-coded%1,4)*10000]
 	    end
     --
-    function MakeOptions(internal)
+    function MakeOptions(internal, forceShift)
         local opts = {}
         opts.alt, opts.ctrl, opts.meta, opts.shift = spGetModKeyState()
+        opts.shift = opts.shift or forceShift
         opts.right = select(5,spGetMouseState())
         opts.internal = internal
         local coded = 0

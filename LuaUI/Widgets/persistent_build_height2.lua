@@ -2741,6 +2741,7 @@ function widget:Update(dt)
 --Echo("g.preGame",g.preGame)
 
     -- commandLot = #WG.commandLot>0 and WG.commandLot or commandLot -- getting global commandLot from draw placement widget, or own commandLot
+    -- shift = shift or WG.commandLot.shift
     if (not shift or not leftClick)--[[(not leftClick or meta)--]] and WG.commandLot[1] and PID then
         TreatLot(WG.commandLot,PID) -- it can happen the PID got reset just after
         if meta and not shift then
@@ -2990,7 +2991,19 @@ function widget:MousePress(mx, my, button)
             -- ignoreFirst=not offmap and not mustTerraform
             
             -- local order = movedPlacement[1]>-1 and {movedPlacement[1],movedPlacement[3]} or {pointX,pointZ}
-            local order = {x,z}
+
+
+
+            local order = {x,z, pid = PID}
+            WG.commandLot.shift = shift
+            workOnRelease = order
+
+            if not shift then
+                return true
+            end
+
+
+            ---
             table.insert(WG.commandLot, order)
             ordered=true
             if mexDefID==PID then
@@ -3000,7 +3013,6 @@ function widget:MousePress(mx, my, button)
                 --
                 return true
             end
-
         elseif PID==geoDefID then
             local geoX,geoZ = CheckGeos(pointX,pointZ)
             if geoX then 
@@ -3051,10 +3063,12 @@ function widget:MousePress(mx, my, button)
     end
 end
 function widget:MouseRelease(mx,my,button)
+        -- work around to have the shift working on very fast ordering (shift might come after the mouseclick)
         if pointX and PID and workOnRelease then
             table.insert(WG.commandLot, workOnRelease)
+
             workOnRelease = false
-            forceResetAcom = true
+            forceResetAcom = not WG.commandLot.shift
             -- Echo('here',os.clock(),'shift?',select(4,spGetModKeyState()),'pid?',PID,spGetActiveCommand())
             ordered=true
 
