@@ -382,7 +382,8 @@ local specCount = 1
 local inRadiusPlacement = false
 local mexes = {}
 
-
+local forceResetAcom = false
+local workOnRelease = false
 
 local water = false
 
@@ -1379,7 +1380,7 @@ local function CheckEnabled()
     return true
 end
 
-local function reset(shift,keepAcom)
+local function reset(shift,keepAcom,force)
         pointX = false
         --cons = {}
         mexes = {}
@@ -1395,8 +1396,8 @@ local function reset(shift,keepAcom)
         end
         ignoreFirst=false
         -- if not (shift or meta) then
-        if not (shift --[[or meta--]]) then
-            if not keepAcom and not DP and (select(2,spGetActiveCommand()) or 0)<0 then
+        if force or not (shift --[[or meta--]]) then
+            if (force or not keepAcom and not DP) and (select(2,spGetActiveCommand()) or 0)<0 then
                 spSetActiveCommand(0)
             end
             PID = false
@@ -1410,6 +1411,9 @@ local function reset(shift,keepAcom)
             --     -- Echo('CI reenabled')
             -- end
             ordered = false
+        end
+        if force then
+            forceResetAcom = false
         end
         movedPlacement[1]=-1
         update=true
@@ -2731,7 +2735,7 @@ function widget:Update(dt)
             WG.commandLot[k] = nil
         end
         --Echo("stopped with rightClick")
-        reset(shift)
+        reset(shift,nil,forceResetAcom)
     end
 
 --Echo("g.preGame",g.preGame)
@@ -2743,7 +2747,7 @@ function widget:Update(dt)
             -- get back activecommand when inserting single ?
             -- spSetActiveCommand(currentCommand)
         end
-        reset(shift)
+        reset(shift,nil,forceResetAcom)
         for k in pairs(WG.commandLot) do
             WG.commandLot[k] = nil
         end
@@ -2966,6 +2970,8 @@ function widget:MousePress(mx, my, button)
         if meta and shift and CI then
             CI._CommandNotify = CI.CommandNotify
             CI.CommandNotify = dumfunc
+        elseif meta and not shift then
+            forceResetAcom = true
         end
 
         --cons = getcons()
@@ -3016,15 +3022,20 @@ function widget:MousePress(mx, my, button)
              -- correcting the placement X and Z that engine should have done for units that float like Hover made by Athena
              -- or forcing the placement with  (CMD_INSERT?)
             elseif (canBuild and not p.floatOnWater and not p.canSub and pointY<=0.1 
-                    or not canBuild and mustTerraform and meta
-                    or meta and not shift)
+                    or not canBuild and mustTerraform and meta)
             then
                 -- ignoreFirst=true
                 widgetHandler:CommandNotify(-PID,{pointX,pointY,pointZ,p.facing},MakeOptions())
                 -- table.insert(WG.commandLot, {pointX,pointZ})
+
+                return true
+            elseif meta and not shift then
+                widgetHandler:CommandNotify(-PID,{pointX,pointY,pointZ,p.facing},MakeOptions())
                 return true
             elseif canBuild and not mustTerraform then
                 if DP and not shift then
+                    workOnRelease = {pointX,pointZ,pid = PID}
+
                     -- widgetHandler:CommandNotify(-PID,{pointX,pointY,pointZ,p.facing},MakeOptions())
 
                     return true
@@ -3040,15 +3051,16 @@ function widget:MousePress(mx, my, button)
     end
 end
 function widget:MouseRelease(mx,my,button)
-        if pointX and PID then
-            local order = {pointX,pointZ,pid = PID}
+        if pointX and PID and workOnRelease then
+            table.insert(WG.commandLot, workOnRelease)
+            workOnRelease = false
+            forceResetAcom = true
             -- Echo('here',os.clock(),'shift?',select(4,spGetModKeyState()),'pid?',PID,spGetActiveCommand())
-            table.insert(WG.commandLot, order)
             ordered=true
 
-            if not select(4,spGetModKeyState()) then
-                spSetActiveCommand(0)
-            end
+            -- if not select(4,spGetModKeyState()) then
+            --     spSetActiveCommand(0)
+            -- end
         end
         return -1
     -- Echo('release','shift?',select(4,spGetModKeyState()))
