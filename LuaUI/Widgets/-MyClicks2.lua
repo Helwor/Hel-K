@@ -188,7 +188,7 @@ function widget:BeforeMousePress(mx,my,button,...)
         -- MouseState[button+2] = false -- not wanna give an incorrect value
         verifMouseState = false
         mouseLocked = false
-        Echo('mouse ' .. button .. ' has been found already pressed')
+        -- Echo('mouse ' .. button .. ' has been found already pressed')
         callback('AfterMouseRelease',mx, my, button,'from MousePress')
     end
     mouse[button] = true

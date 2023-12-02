@@ -119,7 +119,8 @@ local cfg = {
     ,spawn_at_center = true -- spawn the cursor at center of screen when panning is over
     ,follow_ground = true -- make the camera follow the ground during the panning for COFC mode, TA cam use it by default
     ,clamp = 1.15 -- how much the center view can go out of the map for COFC -- false for no limit
-    ,forceOnFight = true,
+    ,forceOnFight = true
+    ,late_space_tol = 0
 --
 }
 -- this old formula is good for default cam mode, but COFC can go beyond
@@ -133,6 +134,7 @@ end
 
 options_path = 'Hel-K/PanView'
 options_order = {'help','zoom_choice'
+    ,'late_space_tol'
     ,'lbl_auto_zoom_out','altitude_ratio','min_zoom_back','min_zoom_back_ratio'
     ,'lbl_auto_zoom_in','zoom_in'}
 options = { -- TODO finish adding options
@@ -240,6 +242,16 @@ options = { -- TODO finish adding options
         max             = top_altitude*0.8,
         step            = 150,
         noHotkey        = true,
+        OnChange = function(self)
+            cfg[self.key] = self.value
+        end
+    },
+    late_space_tol = {
+        name = 'Late Space Tolerance',
+        desc = 'How long can SPACE be pressed after the click',
+        type = 'number',
+        value = cfg.late_space_tol,
+        min = 0, max = 1, step = 0.02,
         OnChange = function(self)
             cfg[self.key] = self.value
         end
@@ -1328,6 +1340,81 @@ end
 --     end
 
 -- end
+-- for k,v in pairs(Spring) do
+--     if k:lower():match('sel') then
+--         Echo(k,v)
+--     end
+-- end
+-- for k,v in pairs(Spring.Utilities) do
+--     if k:lower():match('sel') then
+--         Echo('u',k,v)
+--     end
+-- end
+
+function widget:KeyPress(key, mods, isRepeat)
+    if mods.alt and key == 102 then -- ALT + F
+        verif = 0
+        -- Echo('DG: ' .. DGcount)
+        -- Echo('DS: ' .. DScount)
+        -- Echo('page: ' .. page)
+    end
+    alt, ctrl,meta,shift = mods.alt, mods.ctrl, mods.meta, mods.shift
+    if v.panning then
+         return true
+    end
+    if not isRepeat and (meta or key == 32) then
+        if checkForMeta then
+            -- WORK AROUND: when  key press happens just a few millisec before the click, the mousepress come before anyway, we fix this by resending a mouse press
+            checkForMeta = false
+            if not v.active then
+                if pressbutton == 1 then
+                    local _,_,lmb,_,rmb = spGetMouseState()
+
+                    local time = os.clock()
+                    -- if time - presstime < 0.03 then
+                    if lmb and not rmb and time - presstime < cfg.late_space_tol --[[and page <= presspage + 2--]] then
+
+                        local alt, ctrl, meta, shift = spGetModKeyState()
+                        if meta and not (ctrl or alt or shift) then
+                            local _,cmd,num,aCom = spGetActiveCommand()
+                            local cancelFight = aCom == 'Fight' and cfg.forceOnFight
+                            if (not aCom or cancelFight) and not wh.mouseOwner then
+                                n_reason = n_reason +1
+                                local str= '[' .. FormatTime(spGetGameSeconds()) .. ']: ' .. 'from KeyPress: meta has been pressed just after left click ! sending mouse click, interv ' .. (time - presstime) .. ' page: ' .. page .. ', presspage: ' .. presspage
+                                reasonHistory[n_reason] = str
+                                pressbutton = false
+                                presstime = 0
+                                lastclick, lastclick_time = 0, 0
+                                -- Echo(str)
+                                Spring.SendCommands({'mouse1'}) -- resend a mouse press to apply the panning
+                                return true
+                            end
+                        end
+                    end
+                end
+
+                return
+            end
+            return
+        end
+    end
+    if key == 100 and mods.alt then -- alt + D
+        for i=n_reason-10, n_reason do
+            if reasonHistory[i] then
+                Echo('reason #' .. i .. ' Pan View Didnt trigger:' .. reasonHistory[i] )
+            end
+        end
+    -- spSendCommands('mouse3')
+        -- local rand = math.random()
+        
+        -- Echo("options.altitude_ratio.children is ", options.altitude_ratio.parent)
+        -- for k,v in pairs(options.altitude_ratio) do
+        --     Echo(k,v)
+        -- end
+    end
+end
+
+
 
 function widget:Update(deltaTime)
     page = page + 1
@@ -1341,7 +1428,6 @@ function widget:Update(deltaTime)
     -- if verif then
     --     Echo(verif,'=> Update',page)
     -- end
-
     if tooltip.timeOut then
         tooltip:UpdateTime(deltaTime)
     end
@@ -1349,33 +1435,33 @@ function widget:Update(deltaTime)
         if opt.debugVar.value then
             CopyInto(spGetCameraState(),cs)
         end
-        if pressbutton == 1 then
-            if checkForMeta then
-                checkForMeta = false
-                local time = os.clock()
-                    local _,_,lmb,_,rmb = spGetModKeyState()
+        -- if checkForMeta then
+        --     checkForMeta = false
+        --     if pressbutton == 1 then
+        --         local time = os.clock()
+        --         local _,_,lmb,_,rmb = spGetMouseState()
 
-                    local time = os.clock()
-                    -- if time - presstime < 0.03 then
-                    if lmb and not rmb and time - presstime < 0.03 and page <= presspage + 2 then
-                    local alt, ctrl, meta, shift = spGetModKeyState()
-                    if meta and not (ctrl or alt or shift) then
-                        local _,cmd,num,aCom = spGetActiveCommand()
-                        local cancelFight = aCom == 'Fight' and cfg.forceOnFight
-                        if (not aCom or cancelFight) and not wh.mouseOwner then
-                            n_reason = n_reason +1
-                            local str= '[' .. FormatTime(spGetGameSeconds()) .. ']: ' .. 'from Update: meta has been pressed just after left click ! sending mouse click, interv ' .. (time - presstime) .. ' page: ' .. page .. ', presspage: ' .. presspage .. ', ' .. ' meta? ' .. tostring(meta) .. ' key pressed 32? ' .. tostring(Spring.GetKeyState(32))
-                            presstime = 0
-                            pressbutton = false
-                            lastclick, lastclick_time = 0, 0
-                            reasonHistory[n_reason] = str
-                            -- Echo(str)
-                            Spring.SendCommands({'mouse1'})
-                        end
-                    end
-                end
-            end
-        end
+        --         local time = os.clock()
+        --         -- if time - presstime < 0.03 then
+        --         if lmb and not rmb and time - presstime < 0.03 and page <= presspage + 2 then
+        --             local alt, ctrl, meta, shift = spGetModKeyState()
+        --             if meta and not (ctrl or alt or shift) then
+        --                 local _,cmd,num,aCom = spGetActiveCommand()
+        --                 local cancelFight = aCom == 'Fight' and cfg.forceOnFight
+        --                 if (not aCom or cancelFight) and not wh.mouseOwner then
+        --                     n_reason = n_reason +1
+        --                     local str= '[' .. FormatTime(spGetGameSeconds()) .. ']: ' .. 'from Update: meta has been pressed just after left click ! sending mouse click, interv ' .. (time - presstime) .. ' page: ' .. page .. ', presspage: ' .. presspage .. ', ' .. ' meta? ' .. tostring(meta) .. ' key pressed 32? ' .. tostring(Spring.GetKeyState(32))
+        --                     presstime = 0
+        --                     pressbutton = false
+        --                     lastclick, lastclick_time = 0, 0
+        --                     reasonHistory[n_reason] = str
+        --                     -- Echo(str)
+        --                     Spring.SendCommands({'mouse1'})
+        --                 end
+        --             end
+        --         end
+        --     end
+        -- end
 
         return
     end
@@ -1876,67 +1962,6 @@ function widget:SelectionChanged(sel)
 end
 function widget:KeyRelease(key,mods)
     alt, ctrl,meta,shift = mods.alt, mods.ctrl, mods.meta, mods.shift
-end
-function widget:KeyPress(key, mods, isRepeat)
-    if mods.alt and key == 102 then -- ALT + F
-        verif = 0
-        -- Echo('DG: ' .. DGcount)
-        -- Echo('DS: ' .. DScount)
-        -- Echo('page: ' .. page)
-    end
-    alt, ctrl,meta,shift = mods.alt, mods.ctrl, mods.meta, mods.shift
-    if v.panning then
-         return true
-    end
-    if not isRepeat and (meta or key == 32) then
-        if checkForMeta then
-            -- WORK AROUND: when  key press happens just a few millisec before the click, the mousepress come befoire anyway, we fix this by resending a mouse press
-            checkForMeta = false
-            if not v.active then
-                if pressbutton == 1 then
-                    local _,_,lmb,_,rmb = spGetMouseState()
-
-                    local time = os.clock()
-                    -- if time - presstime < 0.03 then
-                    if lmb and not rmb and time - presstime < 0.03 and page <= presspage + 2 then
-                        local alt, ctrl, meta, shift = spGetModKeyState()
-                        if meta and not (ctrl or alt or shift) then
-                            local _,cmd,num,aCom = spGetActiveCommand()
-                            local cancelFight = aCom == 'Fight' and cfg.forceOnFight
-                            if (not aCom or cancelFight) and not wh.mouseOwner then
-                                n_reason = n_reason +1
-                                local str= '[' .. FormatTime(spGetGameSeconds()) .. ']: ' .. 'from KeyPress: meta has been pressed just after left click ! sending mouse click, interv ' .. (time - presstime) .. ' page: ' .. page .. ', presspage: ' .. presspage
-                                reasonHistory[n_reason] = str
-                                pressbutton = false
-                                presstime = 0
-                                lastclick, lastclick_time = 0, 0
-                                Echo(str)
-                                Spring.SendCommands({'mouse1'}) -- resend a mouse press to apply the panning
-                                return true
-                            end
-                        end
-                    end
-                end
-
-                return
-            end
-            return
-        end
-    end
-    if key == 100 and mods.alt then -- alt + D
-        for i=n_reason-10, n_reason do
-            if reasonHistory[i] then
-                Echo('reason #' .. i .. ' Pan View Didnt trigger:' .. reasonHistory[i] )
-            end
-        end
-    -- spSendCommands('mouse3')
-        -- local rand = math.random()
-        
-        -- Echo("options.altitude_ratio.children is ", options.altitude_ratio.parent)
-        -- for k,v in pairs(options.altitude_ratio) do
-        --     Echo(k,v)
-        -- end
-    end
 end
 
 function WidgetInitNotify(w,name,preloading)

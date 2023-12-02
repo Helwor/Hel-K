@@ -319,7 +319,7 @@ local function DrawGhostSites()
 			-- glBlending(GL_SRC_ALPHA, GL_ONE)
 				if  spIsSphereInView(x,y,z,radius) then
 					-- drawcount = drawcount + 1
-					-- local teamColor = teamColors[teamID]
+					local teamColor = teamColors[teamID]
 					if not teamColor then
 						teamColors[teamID] = {spGetTeamColor(teamID)}
 						teamColor = teamColors[teamID]

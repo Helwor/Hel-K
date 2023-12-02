@@ -25,6 +25,7 @@ include("keysym.lua")
 local customCmds = VFS.Include("LuaRules/Configs/customcmds.lua", nil, VFS.GAME)
 local _, ToKeysyms = include("Configs/integral_menu_special_keys.lua")
 
+
 --------------------------------------------------------------------------------
 -- Speedups
 --------------------------------------------------------------------------------
@@ -104,7 +105,11 @@ local spGetUnitCurrentCommand   = Spring.GetUnitCurrentCommand
 
 local UnitDefs = UnitDefs
 
-
+-- for k,v in pairs(Game) do
+--     if k:lower():match('map') or k:lower():match('form') then
+--         Echo(k,v)
+--     end
+-- end
 local building_starter, guard_remove, ctrl_morph, fix_autoguard, mex_placement
 local DP
 
@@ -292,7 +297,11 @@ local MAX_SEND = 20 -- maximum orders to send per update round
 --------------------------------------------------------------------------------
 local Points={} -- debugging
 local PID
-local g = {lava = (Game.waterDamage or 0) > 3}
+local g = {
+    lava = (Game.waterDamage or 0) > 3,
+    noterra = not Game.mapDamage,
+    timeOutNoTerra = 0,
+}
 local Cam
 --local g.preGame=true
 g.preGame=Spring.GetGameFrame()<5
@@ -631,7 +640,9 @@ function groundModule:GetSnapOrder(target)
     local tol = self.snapTolerance
     local debug = Debug.elevChange()
     local rHeight,rOrigHeight,rTarget=round(self.height),round(self.origHeight),round(target)
-    local water = mol(rTarget,0,tol) and rTarget or 0.1
+
+
+    local water = mol(rTarget,0,tol) and not (p.floatOnWater or not p.canSub) and rTarget or 0.1
     -- if rTarget == 0 then
     --     rTarget = 0.1
     -- end
@@ -683,12 +694,28 @@ function groundModule:GetSnapOrder(target)
 end
 function groundModule:UpdateSnap(level,apply,change,_p)
     local p = _p or p
-    if round(level) <= 0 and (p.floatOnWater or not p.canSub) then
-        Debug.elevChange('level is below water, for this floating build, returning height mod from water level')
-        return 0.1 + placementHeight
-        -- Debug.elevChange('level is below water, for this floating build, returning water level')
-        -- return 0.1
-    end
+    -- if round(level) < 0 and (p.floatOnWater or not p.canSub) then
+    --     Debug.elevChange("level is below water, for this floating build, returning min'ed height mod from water level", 0.1 + math.max(placementHeight, 0))
+    --     -- return 0.1 + math.max(placementHeight, 0)
+    --     Echo("placementHeight is ", placementHeight)
+    --     return 0.1 + placementHeight
+    --     -- Debug.elevChange('level is below water, for this floating build, returning water level')
+    --     -- return 0.1
+    -- end
+    -- if level < 0.1 and (p.floatOnWater or not p.canSub) then
+    --     level = 0.1
+    -- end
+    -- if self.height < 0 and level < 0 and (p.floatOnWater or not p.canSub) then
+    --     level = - self.height + 0.1
+    -- end
+
+    -- if level < 0 and (p.floatOnWater or not p.canSub) then
+    --     Debug.elevChange("level is below water, for this floating build, returning water level")
+    --     placementHeight = - self.height
+    --     return 0
+    -- end
+
+
     if not change and mol(level,self.height,7) then
         local ret = max((p.floatOnWater or not p.canSub) and 0.1 or self.height, self.height)
         Debug.elevChange('no change, returning ' .. ret)
@@ -699,7 +726,7 @@ function groundModule:UpdateSnap(level,apply,change,_p)
     local heights, current, uniqueVals, closest = self:GetSnapOrder(level)
     local snap
     if closest then
-        if abs(closest-level)<=self.snapTolerance then
+        if abs(closest-level)<=self.snapTolerance or (closest == 0.1 and (p.floatOnWater or not p.canSub)) then
             if apply then
                 snapTime=spGetTimer()
             end
@@ -788,8 +815,9 @@ function groundModule:AdjustPH(X,Z,p)
                 newPH = math.min(PH - modHeight, 0)
                 debug('enter '.. (PH == 0 and 'digShallow' or 'limitDig'), 'PH '..PH..' => '..newPH,'modHeight',modHeight)
             end
+        -- elseif PH == 0 and myPlatforms.x and self.height < 0 and (p.floatOnWater or not p.canSub) then
+        --     Echo('OK')
         end
-
     elseif self.altDig then
         local digOnDug = subelevated and self.altPH<0
         if not digOnDug then
@@ -925,7 +953,9 @@ function groundModule:DefineMaxOffset(up,value, apply) -- Define if it should lo
     -- correct the placementHeight, if the placementHeight+height doesnt correspond to the capped pointY, when pointY has been capped to not go under water with build that cannot
     -- this is normal behaviour when user set a negative placement height to build structure underneath higher terrain, and we keep it until 
     -- user want to change height placement on lower terrain
-    local refHeight = min(self.height,self.origHeight)
+
+    -- local refHeight = min(self.height,self.origHeight)
+    local refHeight = self.height
 
     -- Echo("height,origHeight is ", height,origHeight)
 
@@ -1257,6 +1287,10 @@ do
         --         level = origHeight + PH
         --     end
         -- end
+        -- if level < 0.1 and (p.floatOnWater or not p.canSub) then
+        --     level = 0.1
+        -- end
+        Echo("PH, height is ", PH, height,spGetGroundHeight(X,Z),'=>',PH + height)
         level = groundModule:UpdateSnap(level,false,false,p)
         if level == 0 then
             level = 0.1
@@ -1368,7 +1402,7 @@ do
             end
         end
         -- Echo("pointY is ", pointY)
-        return mustTerraform, pointY, blockingStruct, sloppedTerrain
+        return not g.noterra and mustTerraform, pointY, blockingStruct, sloppedTerrain
     end
     CheckTerra=WG.CheckTerra
 end
@@ -1417,6 +1451,7 @@ local function reset(shift,keepAcom,force)
         end
         movedPlacement[1]=-1
         update=true
+        g.timeOutNoTerra = 0
         if WG.DrawTerra then WG.DrawTerra.finish=true end
 end
 -- testing speed
@@ -1444,9 +1479,9 @@ local clock = os.clock
 function widget:KeyRelease(key,mods)
     -- Echo("ordered, meta, shift, mods.shift is ", ordered, meta, shift, mods.shift)
     local newalt,newctrl,newmeta,newshift = mods.alt,mods.ctrl,mods.meta,mods.shift
-    if  shift and not newshift then
+    if  shift and not newshift and PID then
         if ordered then
-            if not DP then
+            if PID and not DP and select(2,spSetActiveCommand()) == -PID then
                 spSetActiveCommand(-1)
             end
             for k in pairs(WG.commandLot) do
@@ -1485,7 +1520,6 @@ function widget:KeyPress(key, mods, isRepeat)
     --     Spring.SendCommands('luaui enablewidget ' .. widget:GetInfo().name)
     -- end
     if not PID then return end
-
     if options.enterSetHeightWithB.value then
         if key == toggleHeight then
             g.toggleEnabled = not g.toggleEnabled
@@ -1496,6 +1530,10 @@ function widget:KeyPress(key, mods, isRepeat)
     local value = key == heightIncrease and 1 or key == heightDecrease and -1
     if not value then return end
     if groundModule.snapFloat and not p.canSub and value<0 then return true end
+    if g.noterra then
+        g.timeOutNoTerra = os.clock() + 3
+        return true
+    end
     if snapTime and spDiffTimers(spGetTimer(),snapTime)<0.25 then
         return true
     else 
@@ -1517,6 +1555,10 @@ function widget:MouseWheel(up, value)
     if not PID then return end
     if not alt then return end
     if not options.altMouseToSetHeight.value then return end
+    if g.noterra then
+        g.timeOutNoTerra = os.clock() + 3
+        return true
+    end
     if groundModule.snapFloat and not p.canSub and value<0 then
         return true
     end
@@ -1553,7 +1595,7 @@ local function ApplyHeight(lot,useBuildHeight) -- defining height and duplicatin
         local isMex = lot[i+n].mex
         local pid = isMex and mexDefID or lot[i+n].pid
         local customElev
-        if isMex then
+        if isMex  or g.noterra then
             customElev = 0
         elseif pid == PID then
             customElev = placementHeight
@@ -2640,8 +2682,9 @@ local function Process(mx,my,update)
     movedPlacement[1]=-1
     -- Echo("sloppedTerrain is ", sloppedTerrain)
     if not platX and not surround and PID~=mexDefID then --
-        if PID~=geoDefID or geoSpot then
-            local lookingForFlat = not blockingStruct and sloppedTerrain and mol(placementHeight,0,7)  and Cam.dist>2000
+        local noterra = g.noterra
+        if noterra or PID~=geoDefID or geoSpot then
+            local lookingForFlat = noterra or not blockingStruct and sloppedTerrain and mol(placementHeight,0,7)  and Cam.relDist>2000
             local findAround = lookingForFlat or blockingStruct
             -- Echo("wantNoTerra is ", wantNoTerra, findAround)
             -- Echo('=>',math.round(os.clock()))
@@ -2728,7 +2771,8 @@ function widget:Update(dt)
         )
     then
         -- resetting while placing if rightclick
-        if not DP and (select(2,spGetActiveCommand()) or 0) < 0 then
+        local aCom = select(2,spGetActiveCommand())
+        if not DP and -(aCom or 0) == PID then
             spSetActiveCommand(-1)
         end
         for k in pairs(WG.commandLot) do
@@ -2769,7 +2813,7 @@ function widget:Update(dt)
     if PID ~= -activeCommand then
         PID = -activeCommand
         myPlatforms.oriPH = false
-        placementHeight=buildHeight[PID] or 0
+        placementHeight= not g.noterra and buildHeight[PID] or 0
         -- if not CI_Disabled then
         --     -- local CI = widgetHandler:FindWidget('CommandInsert')
         --     -- if CI then
@@ -2777,7 +2821,7 @@ function widget:Update(dt)
         --     --     CI_Disabled = true
         --     -- end
         -- end
-        currentCommand=Com -- backup to recover PID on use of meta
+        currentCommand=Com -- backup to recover PID on use of meta -- not used anymore
         update = true
     end
     if not PID then
@@ -2928,8 +2972,13 @@ function widget:MousePress(mx, my, button)
     if button == 3 then
         -- Echo("spGetActiveCommand() is ", spGetActiveCommand())
         -- spSetActiveCommand(0)
+        if workOnRelease then
+            workOnRelease = false
+            widgetHandler.mouseOwner = nil
+        end
         if not shift then
-            reset(shift,true) 
+            -- reset(shift,true) 
+            reset() 
         end
         return --true
     end
@@ -3139,35 +3188,47 @@ do
         glVertex(x + w, y, z + h)
         glVertex(x + w, ey, z + h)
     end
+    
     function widget:DrawScreen()
-        if PID and PID==windDefID and pointX then
-            local minW,incW,maxW,avgW,mult = GetWindAt(pointY==0.1 and spGetGroundHeight(pointX,pointZ) or pointY)
-            local color
-            local mx,my = ToScreen(pointX,pointY,pointZ-24)
-            local str
-            if minW then
-                str =  (minW and ('%.1f'):format(minW)..' < ' or '')..('%.2f'):format(incW)..(avgW and ' ( avg:'..('%.1f'):format(avgW)..')' or '')
-                color = custColor
-                local malus = 1-minW/mult -- how much left from a maxed min
-                local bonus = (incW/maxW)*0.4 -- ratio income vs max income, 0.4 beeing the max possible bonus
-                red = 0.5+malus -- to make strong yellow we need red at 1
-                green = 1-malus+bonus
-                color[1] = red
-                color[2] = green
-                color[4] = 0.6
-                -- color[3] = red*0.5 -- need to compensate the reddish colors for visibility
-            else 
-                color = teal
-                str = ('%.2f'):format(incW)
+        if PID and pointX then
+            if PID==windDefID then
+                local minW,incW,maxW,avgW,mult = GetWindAt(pointY==0.1 and spGetGroundHeight(pointX,pointZ) or pointY)
+                local color
+                local mx,my = ToScreen(pointX,pointY,pointZ-24)
+                local str
+                if minW then
+                    str =  (minW and ('%.1f'):format(minW)..' < ' or '')..('%.2f'):format(incW)..(avgW and ' ( avg:'..('%.1f'):format(avgW)..')' or '')
+                    color = custColor
+                    local malus = 1-minW/mult -- how much left from a maxed min
+                    local bonus = (incW/maxW)*0.4 -- ratio income vs max income, 0.4 beeing the max possible bonus
+                    red = 0.5+malus -- to make strong yellow we need red at 1
+                    green = 1-malus+bonus
+                    color[1] = red
+                    color[2] = green
+                    color[4] = 0.6
+                    -- color[3] = red*0.5 -- need to compensate the reddish colors for visibility
+                else 
+                    color = teal
+                    str = ('%.2f'):format(incW)
 
+                end
+                glColor(color)
+                UseFont(font)
+                TextDrawCentered(str, mx, my+40)
+                -- glText(str, mx-(min and 30 or 5), my+10, 11)    -- not enough visible without outline
+                glColor(white)
             end
-            glColor(color)
-            UseFont(font)
-            TextDrawCentered(str, mx, my+40)
-            -- glText(str, mx-(min and 30 or 5), my+10, 11)    -- not enough visible without outline
-            glColor(white)
-
-
+            local toNoTerra = g.timeOutNoTerra
+            if toNoTerra > 0 then
+                if os.clock() < toNoTerra then
+                    glColor(white)
+                    UseFont(font)
+                    local mx,my = ToScreen(pointX,pointY,pointZ-12)
+                    TextDrawCentered("This Map doesn't allow Terraformation !", mx, my+20)
+                else
+                    toNoTerra = 0
+                end
+            end
         end
         -- if true then return end
         for i,p in ipairs(Points) do

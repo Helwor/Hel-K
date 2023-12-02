@@ -2452,7 +2452,7 @@ local function PoseSpecialOnRail()
 		if status == 'connect' then
 			irail.color = color.teal
 			for k in pairs(newgrids) do
-				if k:match('m') then
+				if type(k) == 'string' and k:match('m') then
 					irail.conectMex = true
 				end
 			end
@@ -3470,14 +3470,14 @@ function widget:Update(dt)
     if preGame then
         preGame=Spring.GetGameSeconds()<0.1
         -- Echo("#preGameBuildQueue is ", #preGameBuildQueue)
-        if not preGame and preGameBuildQueue and preGameBuildQueue[1] then
-            tasker=preGameBuildQueue.tasker
-            -- Echo("preGameBuildQueue.tasker is ", preGameBuildQueue.tasker)
-            if tasker then
-                -- Echo("got tasker",tasker)
-                ProcessPreGameQueue(tasker)
-            end
-        end
+        -- if not preGame and preGameBuildQueue and preGameBuildQueue[1] then
+        --     tasker=preGameBuildQueue.tasker
+        --     -- Echo("preGameBuildQueue.tasker is ", preGameBuildQueue.tasker)
+        --     if tasker then
+        --         -- Echo("got tasker",tasker)
+        --         ProcessPreGameQueue(tasker)
+        --     end
+        -- end
     end
     if PID and status=='none' then
     	status='ready'
@@ -3498,6 +3498,7 @@ function widget:Update(dt)
 			p:RecoverPID()
 			status='engaged'
 			reset()
+			return widget:Update(dt)
 		end
 		return
 	end
@@ -3507,6 +3508,7 @@ function widget:Update(dt)
 			p:RecoverPID()
 			status='engaged'
 			reset()
+			return widget:Update(dt)
 		end
 		return
 	end
@@ -3514,7 +3516,10 @@ function widget:Update(dt)
 	if status=='engaged' then
 		if rightClick  then
 			status='held_!R'
-			sp.SetActiveCommand(0)
+	        local aCom = select(2,sp.GetActiveCommand())
+	        if -(aCom or 0) == p.PID then
+	            sp.SetActiveCommand(0)
+	        end
 			WG.force_show_queue_grid = true
 			reset()
 			return
@@ -3542,8 +3547,8 @@ function widget:Update(dt)
 	end
 
 	if status=='none' then
-		local acom = select(2,sp.GetActiveCommand())
-		if acom and acom < 0 and PID == -acom then
+		local aCom = select(2,sp.GetActiveCommand())
+		if -(aCom or 0) == p.PID then
 			if not widgetHandler.mouseOwner then
 				sp.SetActiveCommand(-1)
 				reset(true)
@@ -3652,11 +3657,12 @@ end
 	--wasspecial[PID] = E_SPEC[PID] and special or nil
 
 	-- if leftClick then  sp.SetActiveCommand(-1) end
-
-	p.spacing = p.spacing or sp.GetBuildSpacing()
+	local spacing = sp.GetBuildSpacing()
+	if not p.spacing then
+		p.spacing = spacing
 	--Echo(" is ", spacing,sp.GetBuildSpacing())
-	if p.spacing and p.spacing~=sp.GetBuildSpacing() then 
-		p.spacing = sp.GetBuildSpacing()
+	elseif p.spacing~=spacing then 
+		p.spacing = spacing
 		Init()
 		--widgetHandler:UpdateWidgetCallIn("DrawWorld", self)	
 		return
@@ -3674,7 +3680,10 @@ function widget:KeyRelease(key, mods)
     local newalt,newctrl,newmeta,newshift = mods.alt,mods.ctrl,mods.meta,mods.shift
 
 	alt, ctrl, meta, shift = newalt,newctrl,newmeta,newshift
-
+	local _alt, _ctrl, _meta, _shift = sp.GetModKeyState()
+	if shift ~= _shift then
+		Echo('in PBH2 modkey differs from key release !',shift, _shift)
+	end
 	-- if waitReleaseShift and not shift then sp.SetActiveCommand(0) waitReleaseShift=false end
 	if Drawing and shift and PID then
 		GoStraight(alt)

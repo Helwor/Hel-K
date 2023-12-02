@@ -2461,20 +2461,20 @@ local hotkeysCombos={
 
 
 
-				-- {name='Alt Skirms',
-				-- method='cylinder',
+				{name='Alt Skirms',
+				method='cylinder',
 				-- keys={'?SPACE','N_2','doubleTap'},
-				-- switch={
-				-- 	{['?name']={'jumpskirm'}},
-				-- 	{['?name']={'spiderskirm'}},
-				-- },
-				-- keep_on_fail = true,
+				groups={
+					{name = 'shieldfelon'},
+					{name = 'shieldskrim'},
+				},
+				keep_on_fail = true,
 				-- switch_time = 1,
 				-- doubleTap_time = 0.35,
-				-- --continue=true, --reset future selection at each update round
+				--continue=true, --reset future selection at each update round
 				-- call_on_fail = 'Skirms',
-				-- share_radius = 'Skirms',
-				-- color={0.9, 0.9, 0.1, 1},fading=0.8},
+				share_radius = 'Skirms',
+				color={0.9, 0.9, 0.1, 1},fading=0.8},
 
 			------ RIOT -------
 
@@ -2729,6 +2729,7 @@ local hotkeysCombos={
 				-- defs={ ['class']='aaunit', ['?']={['!fireState']=0,['!name']='cloakaa'} },
 				defs={ ['class']='aaunit'},
 				prefer = {['!fireState']=0},
+				call_on_fail = 'Alt Skirms',
 				color={0.2, 0.2, 0.6, 1},fading=1},
 
 				{name='all AA', -- pick up all AA and put them back with fire ON

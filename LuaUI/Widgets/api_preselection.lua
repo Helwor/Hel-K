@@ -185,13 +185,15 @@ local PreSelection_GetUnitsInSelectionBox = function ()
 			else
 				local myUnits = {}
 				local teamID = 0
+				local n = 0
 				for i = 1, #units do
 					teamID = Spring.GetUnitTeam(units[i])
 					if teamID == myTeamID and not Spring.GetUnitNoSelect(units[i]) then
-						myUnits[#myUnits+1] = units[i]
+						n = n + 1
+						myUnits[n] = units[i]
 					end
 				end
-				if #myUnits > 0 then
+				if n > 0 then
 					return (WG.SelectionRank_GetFilteredSelection and WG.SelectionRank_GetFilteredSelection(myUnits)) or myUnits
 				else
 					return nil
@@ -260,16 +262,21 @@ function widget:MousePress(x, y, button)
 	screenStartX = x
 	screenStartY = y
 	if button == 1 then
-		holdingForSelection = false
-		if Spring.GetActiveCommand() == 0 then
-			thruMinimap = not WG.MinimapDraggingCamera and spIsAboveMiniMap(x, y)
+		holdingForSelection = Spring.GetBoxSelectionByEngine()
+		if holdingForSelection then
 			local _
-
-			if not WG.Chili.Screen0:IsAbove(x,y) then
-				_, start = SafeTraceScreenRay(x, y, true, thruMinimap)
-				holdingForSelection = true
-			end
+			_, start = SafeTraceScreenRay(x, y, true, thruMinimap)
 		end
+		-- holdingForSelection = false
+		-- if Spring.GetActiveCommand() == 0 then
+		-- 	thruMinimap = not WG.MinimapDraggingCamera and spIsAboveMiniMap(x, y)
+		-- 	local _
+
+		-- 	if not WG.Chili.Screen0:IsAbove(x,y) then
+		-- 		_, start = SafeTraceScreenRay(x, y, true, thruMinimap)
+		-- 		holdingForSelection = true
+		-- 	end
+		-- end
 	end
 end
 
