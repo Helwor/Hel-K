@@ -154,7 +154,7 @@ local builderClass = {}
 
 local rangeColor = {0.4,0.5,0.7,cfg.draw_alpha}
 local osclock = os.clock
-options_path = 'Settings/Smart Builders'
+options_path = 'Hel-K/Smart Builders'
 options_order = {
     'lbl_roam','allow_roam','roam_value','roam_time_out',
     'lbl_fight_roam','allow_roam_on_fight','replace_fight',

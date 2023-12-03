@@ -1045,9 +1045,15 @@ local hotkeysCombos={
 				-- 	   -- , instead {subest1,subest2} is enough, see the macro 'One Commando' for an example
 				-- },
 				-- prefer = {['!family']='gunship',['?']={['!class']='raider',['name']='jumpraid'}},
-				switch={
+				groups={
 					-- switch definitions until one is matching immediately, if none, the loop will stop once all defs have been tested
 					-- the starting switch is incremented at each new call
+					{
+						XAND = {
+							family ={'hover','amph'}
+						},
+						family='ship',['!class']={'conunit','raider'}
+					},
 					{
 					   -- SYNTAXE: OPERATORS NOT and OR 
 					   -- XAND = {['?'] = {['?name']={'shieldshield','amphlaunch'}, family='ship' } }, -- adding shield if we found something
@@ -1073,10 +1079,6 @@ local hotkeysCombos={
 						-- , instead {subest1,subest2} is enough, see the macro 'One Commando' for an example
 					},
 					{
-						-- XAND = {['?name']={'shieldshield','amphlaunch'}},
-						['?family']={'ship'},['!class']={'conunit','raider'}
-					},
-					{
 						-- XAND = {name='shieldshield'},
 						['family']='gunship',['!class']={'conunit','raider'},['!name']='gunshipbomb'
 					}
@@ -1090,7 +1092,7 @@ local hotkeysCombos={
 				},
 				switch_time = 0.4,
 				call_on_fail = 'Shields with raiders',
-				share_radius = 'Ground Army / GS / ships',
+				-- share_radius = 'Ground Army / GS / ships',
 				-- call_on_fail = 'Shields with raiders',
 				color={1.0, 0.9, 0.9, 0.8},fading=0.6
 			},
@@ -6027,14 +6029,16 @@ do
 				_,new, newdefs, newdefsNum = FindUnits(defs,finalValid,pool,(comment or '') .. msg .. 'DEFS ', multiCheck)
 			end
 		end
-
+		if newdefs and newdefs.XAND then
+			XAND = newdefs.XAND
+		end
 
 		---------------------
 		n = finalValid.n
 		if XAND then
 			if n>0 then
 				local isnew
-				_,isnew, newdefs = FindUnits(XAND,finalValid,pool,(comment or '') ..  'XAND ')
+				_,isnew = FindUnits(XAND,finalValid,pool,(comment or '') ..  'XAND ')
 				new = new or isnew
 			end
 			defs.XAND = XAND

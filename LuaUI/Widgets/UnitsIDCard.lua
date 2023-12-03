@@ -29,7 +29,8 @@ local GetCameraHeight = f.GetCameraHeight
 -- local debugProps = {'name','id','isInSight','isInRadar'}
 -- local debugProps = {'isKnown'}
 -- local debugProps = {'health'}
-local debugProps = {'id','cost'}
+-- local debugProps = {'id','cost'}
+local debugProps = {'id','isMine'}
 
 
 

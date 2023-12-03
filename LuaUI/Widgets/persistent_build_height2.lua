@@ -726,11 +726,13 @@ function groundModule:UpdateSnap(level,apply,change,_p)
     local heights, current, uniqueVals, closest = self:GetSnapOrder(level)
     local snap
     if closest then
-        if abs(closest-level)<=self.snapTolerance or (closest == 0.1 and (p.floatOnWater or not p.canSub)) then
+        if abs(closest-level)<=self.snapTolerance 
+            or (level<0 and closest == 0.1 and (p.floatOnWater or not p.canSub)) then
             if apply then
                 snapTime=spGetTimer()
             end
-            if closest==round(level) then
+            -- Echo("closest,level is ", closest,level)
+            if round(closest)==round(level) then
                 Debug.elevChange('level '.. round(level) .. ' is same as the snap: '.. uniqueVals[closest])
             else
                 Debug.elevChange('closest snap from ' .. round(level) .. ' is ' .. uniqueVals[closest] .. ': ' .. closest)
@@ -961,7 +963,7 @@ function groundModule:DefineMaxOffset(up,value, apply) -- Define if it should lo
 
     -- if 
 
-    if (p.floatOnWater or not p.canSub) and (placementHeight+self.minGround)<0 and mol(round(pointY),0,7) then
+    if (p.floatOnWater or not p.canSub) and (placementHeight+self.minGround)<0 and refHeight>10 and mol(round(pointY),0,7) then
         local oldPH = placementHeight
         placementHeight = -abs(math.max(refHeight,0))
         -- Echo('correcting placement height '..placementHeight..' to '..-abs(math.max(refHeight,0)))
@@ -1275,6 +1277,9 @@ do
         -- level = --[[round(PH) == 0 and groundModule.maxGround or--]]  PH + (modHeight and groundModule.minGround or height)
         -- level = --[[round(PH) == 0 and groundModule.maxGround or--]]  PH + (elevated and height or origHeight)
         level = PH + height
+        if (p.floatOnWater and not p.canSub) and height < 0 then
+            level = level - height
+        end
         -- level = PH + (p.floatOnWater and not p.canSub and 0 or height)
         -- level = --[[round(PH) == 0 and groundModule.maxGround or--]]  PH + groundModule.minGround
         -- level = --[[round(PH) == 0 and groundModule.maxGround or--]]  PH + refHeight
@@ -1290,7 +1295,9 @@ do
         -- if level < 0.1 and (p.floatOnWater or not p.canSub) then
         --     level = 0.1
         -- end
-        Echo("PH, height is ", PH, height,spGetGroundHeight(X,Z),'=>',PH + height)
+        if Debug.elevChange() then
+            Echo("PH, height is ", PH, height,spGetGroundHeight(X,Z),'=>',PH + height)
+        end
         level = groundModule:UpdateSnap(level,false,false,p)
         if level == 0 then
             level = 0.1
