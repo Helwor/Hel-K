@@ -17,7 +17,7 @@ end
 --------------------------------------------------------------------------------
 -- Speedup
 local Echo = Spring.Echo
-
+local preGame = Spring.GetGameFrame() < 2
 
 include("keysym.lua")
 VFS.Include("LuaRules/Utilities/glVolumes.lua")
@@ -196,9 +196,11 @@ function widget:UnitCommand(id, _,_,cmd, params,opts)
 	end
 end
 
+
+
 local function GetQueuedFactories()
 	local t = spGetSelectedUnitsSorted()
-	
+		
 	if tempQueue and tempQueueClock + 1 < os.clock() then
 		tempQueue = false
 	end
@@ -206,16 +208,31 @@ local function GetQueuedFactories()
 	if not t then
 		return ret
 	end
-	for defID, units in pairs(t) do
-		if builderDefID[defID] then
-			for i, id in ipairs(units) do
-				local queue = spGetCommandQueue(id, -1)
-				if queue then
-					for i, order in ipairs(queue) do
-						if order.id < 0 and parentOfPlate[-order.id] then
-							local x,y,z = unpack(order.params)
-							if not ret[x .. '-' .. z] then
-								ret[x .. '-' .. z] = {unitDefID = -order.id, x=x, y=y, z=z, queued = true}
+	if WG.InitialQueue then
+		local queue = WG.preGameBuildQueue
+		if queue then
+			for i, build in ipairs(queue) do
+				local defID = build[1]
+				if parentOfPlate[defID] then
+					local x,y,z = build[2], build[3], build[4]
+					if not ret[x .. '-' .. z] then
+						ret[x .. '-' .. z] = {unitDefID = defID, x=x, y=y, z=z, queued = true}
+					end
+				end
+			end
+		end
+	else
+		for defID, units in pairs(t) do
+			if builderDefID[defID] then
+				for i, id in ipairs(units) do
+					local queue = spGetCommandQueue(id, -1)
+					if queue then
+						for i, order in ipairs(queue) do
+							if order.id < 0 and parentOfPlate[-order.id] then
+								local x,y,z = unpack(order.params)
+								if not ret[x .. '-' .. z] then
+									ret[x .. '-' .. z] = {unitDefID = -order.id, x=x, y=y, z=z, queued = true}
+								end
 							end
 						end
 					end
@@ -295,7 +312,6 @@ local function CheckTransformPlateIntoFactory(plateDefID, shift)
 	local factoryDefID = childOfFactory[plateDefID]
 	mx, mz = SnapBuildToGrid(mx, mz, plateDefID) -- Make sure the plate is in range when it is placed
 	local unitID, distSq, factoryData, isQueued = GetClosestFactory(mx, mz, factoryDefID)
-	
 	if not unitID or isQueued and not shift then
 		local cmdName = select(4, spGetActiveCommand())
 		if cmdName and ('buildunit_'..cmdName) == buildAction[plateDefID] then

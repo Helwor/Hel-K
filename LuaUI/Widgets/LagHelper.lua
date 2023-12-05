@@ -44,7 +44,7 @@ local glDrawGroundCircle        = gl.DrawGroundCircle
 local glPopMatrix               = gl.PopMatrix
 
 local escape_key -- fixing WG.enteringText misfunctionning, doesnt get falsified when hit escape key
-
+local speedUp = false -- speed up process when toi level up when fps are really good
 
 local debugging = false
 local DebugUp = function() end
@@ -151,7 +151,7 @@ local LEVELS = { --updated and back values completed by user original set at ini
     -- {'distdraw',            100,    'UnitLodDist'               }, -- very crappy appearance // since last engine it is read only
 
     {'advmodelshading',       0,    'AdvUnitShading'            },
-    {'advmapshading',       0,    'AdvMapShading'            },
+    -- {'advmapshading',       0,    'AdvMapShading'            }, -- can be too bright (or too dark?) when disabled
 
     --{'distdraw',              0,    'UnitLodDist'       ,100    }, -- very crappy appearance // since last engine it is read only
 
@@ -450,7 +450,7 @@ function widget:Update(dt,forced)
                 -- msg = 'game is at time'
             end
         end
-        if mesg and time-echoUpd > 1 then
+        if msg and time-echoUpd > 1 then
             Echo(msg,frame-lastFrameInUpdate)
             echoUpd=time
         end
@@ -486,7 +486,7 @@ function widget:Update(dt,forced)
         average_lag = CalcAverageLag(dt,1) -- new stuff
         totaldt = totaldt + dt
         dtcount = dtcount +1
-
+        speedUp = average_lag < 1/45 -- 45 fps we speed up the level up
         totalCaughtUpPerSec = totalCaughtUpPerSec + caughtUpPerSec
         caughtUpCount = caughtUpCount + 1
 
@@ -562,7 +562,7 @@ function widget:Update(dt,forced)
 
     if not skipMeasure  and switch_method=='auto' then
         cycles,time = cycles+1,time+dt
-        if time>time_check then
+        if speedUp and time >= 1 or time>time_check then
             -- average_lag = time/cycles
 
 

@@ -3098,7 +3098,13 @@ function widget:MousePress(mx, my, button)
 
                 return true
             elseif meta and not shift then
+                if g.preGame then
+                    ignoreFirst = true
+                end
                 widgetHandler:CommandNotify(-PID,{pointX,pointY,pointZ,p.facing},MakeOptions())
+                if g.preGame then
+                    spSetActiveCommand(0)
+                end
                 return true
             elseif canBuild and not mustTerraform then
                 if DP and not shift then

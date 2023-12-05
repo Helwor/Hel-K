@@ -385,9 +385,9 @@ local function Treat(id,allySelUnits,unit, blink, debugInSight)
 			-- end
 			-- local builder = bp<1 and Units[unit.builtBy]
 			color = color
-				or bp and bp>=0.0001 and (
+				or bp and bp>=0 and (
 						bp<0.8 and grey
-						or bp<0.9999 and lightgreen
+						or bp<1 and lightgreen
 					)
 				or paralyzed and b_ice
 				or disarmUnits[id]~=nil and b_whiteviolet
@@ -495,6 +495,7 @@ local function Treat(id,allySelUnits,unit, blink, debugInSight)
 	-- end
 
 end
+
 function widget:GameOver()
 	widgetHandler:RemoveWidget(widget)
 end
@@ -565,7 +566,7 @@ local GlobalDraw = function()
 	end
 	-- Echo("table.size(inRadar) is ", table.size(inRadar))
 	-- show last seen unit's symbol and color for a few sec ocne they gone out of view
-	if not debugInSight then
+	if not debugInSight and Cam.fullview~=1 then
 		for id, t in pairs(inRadar) do
 			if t.toframe < currentFrame then
 				inRadar[id] = nil

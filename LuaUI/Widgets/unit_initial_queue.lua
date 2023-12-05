@@ -946,9 +946,9 @@ local function InitialQueueHandleCommand(cmdID, cmdParams, cmdOptions)
 				if not (WG.drawingPlacement and (WG.drawingPlacement[2] or WG.drawingPlacement.mexes[1])) then -- dont allow placement erasing when drawing more than one placement
 					table.remove(buildQueue, i)
 					msg = "IQ|2|"..i
+					return true
 				end
-
-				return true
+				break
 			end
 		end
 	end
@@ -1005,7 +1005,7 @@ local function InitialQueueHandleCommand(cmdID, cmdParams, cmdOptions)
 			end
 		end
 	else	-- normal build
-		for i=1,#buildQueue do buildQueue[i]=nil end --++ Helwor
+		for i=1,#buildQueue do buildQueue[i]=nil end
 		buildQueue[1]=buildData --++
 		-- buildQueue = {buildData}
 		msg = "IQ|4|"..selDefID.."|"..math.modf(bx).."|"..math.modf(by).."|"..math.modf(bz).."|"..buildFacing
