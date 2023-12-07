@@ -425,7 +425,7 @@ local cs = Spring.GetCameraState()
 local lastpx,lastpz = cs.px,cs.pz
 
 ---*** TEST 1***
-local testFrameSkip = true
+local testFrameSkip = false
 local lastFrameInUpdate = spGetGameFrame()
 local echoUpd = clock()
 ---*** TEST 1***
