@@ -1,6 +1,7 @@
 
 
-
+-- Author Helwor
+-- License GPL v2 or v3
 -- now registering only what we need from global before we change environment, aswell will quicken access
 
 local Echo      		= Spring.Echo
@@ -6276,7 +6277,7 @@ do
     end
 	function CodeOptions(options)
 		local coded = 0
-		for opt, isTrue in pairs(isTrue) do
+		for opt, isTrue in pairs(options) do
 			if isTrue then coded=coded+code[opt] end
 		end
 		options.coded=coded

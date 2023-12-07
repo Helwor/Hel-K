@@ -91,6 +91,7 @@ local CMD_UNIT_SET_TARGET = customCmds.UNIT_SET_TARGET
 local CMD_REARM = customCmds.REARM
 local CMD_JUMP = customCmds.JUMP
 local CMD_UNIT_CANCEL_TARGET = customCmds.UNIT_CANCEL_TARGET
+local CMD_EXCLUDE_PAD = customCmds.EXCLUDE_PAD
 
 local opts = CMD_OPT_ALT + CMD_OPT_INTERNAL
 
@@ -135,10 +136,16 @@ local KEYSYMS = KEYSYMS
 local UnitDefs = UnitDefs
 local maxUnits = Game.maxUnits
 
+
+
+
 local f = VFS.Include('LuaUI\\Widgets\\UtilsFunc.lua')
 
 
 options_path = 'Hel-K/EzTarget'
+
+
+
 ------------- DEBUG CONFIG
 local Debug = { -- default values
     active=true -- no debug, no hotkey active without this
@@ -197,6 +204,9 @@ local transportDefID = {
 
 local morphedComDGUN = {}
 
+
+
+
 -- local iconSizeDefID = {}
 -- for defID,def in ipairs(UnitDefs) do
 --     if def.name == 'shieldbomb' then
@@ -228,25 +238,23 @@ for defID,def in ipairs(UnitDefs) do
         airAttackerDefID[defID]=true
     end
 end
-local airpadDefID = {
-    [UnitDefNames['shipcarrier'].id] = true
-    ,[UnitDefNames['staticrearm'].id] = true -- air pad
-    ,[UnitDefNames['factoryplane'].id] = true
 
-}
+local airpadDefID = {}
+do
+    local airpadDefs = VFS.Include("LuaRules/Configs/airpad_defs.lua", nil, VFS.GAME)
+    for defID in pairs(airpadDefs) do
+        airpadDefID[defID] = true
+    end
+end
 local controllableRepairerDefID = {}
 local controllableRepairerDefIDIndex = {}
 for defID,def in ipairs(UnitDefs) do
-    if def.canRepair and not def.isBuilding then -- NOTE: strider hub and caretaker doesn't have .isBuilding, so it's good for us
+    if def.canRepair and not def.isBuilding then -- NOTE: strider hub and caretaker doesn't have .isBuilding, so it's good for us, but if it has in the futur, we need to change this
         controllableRepairerDefID[defID] = true
         table.insert(controllableRepairerDefIDIndex, defID)
     end
 end
-for defID,def in ipairs(UnitDefs) do
-    if def.canRepair and not def.isBuilding then -- NOTE: strider hub and caretaker doesn't have .isBuilding, so it's good for us
-        controllableRepairerDefID[defID] = true
-    end
-end
+
 local staticBuildingDefID = {}
 for defID,def in ipairs(UnitDefs) do
     if not spuGetMoveType(def) then
@@ -260,10 +268,21 @@ for defID,def in ipairs(UnitDefs) do
     end
 end
 
+local EzAlliedDefID = {} -- allied unit's defID we might look for 
+for defID in pairs(airpadDefID) do
+    EzAlliedDefID[defID] = true
+end
+
+
+
 local terraUnitDefID = UnitDefNames['terraunit'].id
 
-local enemies, mines = {}, {}
-local enemiesByDist, minesByDist = {}, {}
+
+local yellow = unpack({f.COLORS.yellow}) -- color that is used on the fly during evaluation
+
+
+local enemies, mines, allied = {}, {}, {}
+local minesByDist = {}
 local poses = {}
 -- same as gui_selection_modkeys.lua
 local toleranceTime = Spring.GetConfigInt('DoubleClickTime', 300) * 0.001 -- no event to notify us if this changes but not really a big deal
@@ -348,7 +367,7 @@ local cmdByName = {
 local EzTarget, Execute, UpdateSelection
 -- annexes
 local ClampScreenPosToWorld
-local CanJumpNow, IsDefaultCommandActive, MakeOptions, ByIDs, ByIndex, CompareIDTables, GetVisibleUnits, SortMines, SortEnemies
+local CanJumpNow, IsDefaultCommandActive, MakeOptions, ByIDs, ByIndex, CompareIDTables, GetVisibleUnits, SortMines --, SortEnemies
 
 -- shared variables
 local mods = (
@@ -422,6 +441,8 @@ end
 
 
 local function Evaluate(type, id, engineCmd)
+
+
     -- if not vHas.hasAttacker then
     --     return v.cmdOverride
     -- end
@@ -505,9 +526,9 @@ local function Evaluate(type, id, engineCmd)
     -- if namecom then namecom = namecom:lower():gsub(' ','') end
 
     local alt, ctrl, meta, shift = spGetModKeyState()
-    if alt~=mods.alt or meta~=mods.meta or ctrl~=mods.ctrl or shift~=mods.shift then
-        -- Echo('MODS key from KeyPress was bugged in EzTarget !',alt, ctrl, meta, shift, mods.meta)
-    end
+    -- if alt~=mods.alt or meta~=mods.meta or ctrl~=mods.ctrl or shift~=mods.shift then
+    --     -- Echo('MODS key from KeyPress was bugged in EzTarget !',alt, ctrl, meta, shift, mods.meta)
+    -- end
     if acom~=nil and (namecom and namecom~=v.moddedActiveCommand) then -- not doing anything when there is an active command 
         -- v.moddedActiveCommand = false
         reset()
@@ -547,15 +568,17 @@ local function Evaluate(type, id, engineCmd)
     --     defID = spGetUnitDefID(id)
     --     f.Page(UnitDefs[spGetUnitDefID(id)])
     -- end
-
+    local traced, tracedDefID,  isAllied
     if type=='unit' then
         local unit = Units[id]
         if unit then
+            traced = id
             -- local defID = spGetUnitDefID(id)
             local defID = unit.defID
+            tracedDefID = defID
             -- local isAllied = unit.isAllied
-            local isAllied = unit.isAllied
-            if wantTarget and not ctrl and not isAllied and not ignoreTargetDefID[defID] then
+            isAllied = unit.isAllied
+            if wantTarget and not ctrl and (not isAllied) and not ignoreTargetDefID[defID] then
                  v.defaultTarget = id
             end
 
@@ -581,10 +604,10 @@ local function Evaluate(type, id, engineCmd)
     -- else
     --     -- Echo('continue')
     -- end
-    v.moddedTarget, s.moddedSelect =  EzTarget(wantTarget and not v.noHelperTarget, wantSelect)
+    v.moddedTarget, s.moddedSelect =  EzTarget(wantTarget and not v.noHelperTarget, wantSelect, vHas.gotAirUnit)
     local modSelDefID
     if s.moddedSelect then
-        modSelDefID = spGetUnitDefID(s.moddedSelect)
+        modSelDefID = mines[s.moddedSelect]
     end
 
     local canTransport = commandMap[CMD_UNLOAD_UNITS]
@@ -595,28 +618,43 @@ local function Evaluate(type, id, engineCmd)
 
     local adjustingTarget, adjustingAltTarget, adjustingSelection
 
-    local padFound
-    if vHas.gotAirUnit and not v.moddedTarget and defaultCMD~=CMD_REARM then
-        -- if we got an air unit that can land and there is a airpad-like type around the cursor which is not the closest and no ezTarget to attack then, 
-        if s.moddedSelect and s.moddedSelect ~= s.defaultSelect then
-            if airpadDefID[modSelDefID] then
-                padFound = s.moddedSelect
-            end
-        end
-        if not padFound then
-            for id in pairs(mines) do
-                local tgtDefID = spGetUnitDefID(id)
-                if airpadDefID[tgtDefID] then
-                    -- got a pad around the cursor that is not the closest but we take it anyway
-                    padFound = id
-                    break
+    local padFound, padAround
+    if vHas.gotAirUnit then
+        if not v.moddedTarget and defaultCMD~=CMD_REARM then
+            -- if we got an air unit that can land and there is a airpad-like type around the cursor which is not the closest and no ezTarget to attack then, 
+            if s.moddedSelect and s.moddedSelect ~= s.defaultSelect then
+                if airpadDefID[modSelDefID] then
+                    padFound = s.moddedSelect
+                    padAround = padFound
                 end
             end
-        end
-        if padFound then
-            v.moddedTarget = padFound
+            if not padFound then
+                for i,id in ipairs(minesByDist) do
+                    local defID = mines[id]
+                    if airpadDefID[defID] then
+                        -- got a pad around the cursor that is not the closest but we take it anyway
+                        padFound = id
+                        padAround = id
+                        break
+                    end
+                end
+            end
+            if not padFound then
+                for id, defID in pairs(allied) do
+                    if airpadDefID[defID] then
+                        -- got a pad around the cursor that is not the closest but we take it anyway
+                        padFound = id
+                        padAround = id
+                        break
+                    end
+                end
+            end
+            if padFound then
+                v.moddedTarget = padFound
+            end
         end
     end
+
     -- if we got a unit that can repair, and a //static// building unfinished around, and no target to attack, we target the //static// building
     -- when holding alt, point to the nearest builder with another builder and activate the guard command
     -- when not holding alt, point to the nearest unfinished static build and activate the repair command
@@ -625,7 +663,7 @@ local function Evaluate(type, id, engineCmd)
         local singleSel = not sel[2] and sel[1]
         if alt then
             for i, id in ipairs(minesByDist) do
-                local defID = spGetUnitDefID(id)
+                local defID = mines[id]
                 if factoryDefID[defID] or controllableRepairerDefID[defID] then
                     local onSelf = singleSel == id
                     if not onSelf then
@@ -642,7 +680,7 @@ local function Evaluate(type, id, engineCmd)
                     drawCircle[v.moddedTarget] = {sx,sy,0,SPOT_RADIUS,{1,1,0,1},1,false,true,v.moddedTarget,true}
 
                 else
-                    drawCircle[v.moddedTarget][5] = {1,1,0,1}
+                    drawCircle[v.moddedTarget][5] = yellow
                     drawCircle[v.moddedTarget][6] = 1
                 end
             end
@@ -666,10 +704,10 @@ local function Evaluate(type, id, engineCmd)
                     if not drawCircle[v.moddedTarget] then
                         -- local _,_,_,x,y,z = spGetUnitPosition(v.moddedTarget,true)
                         local sx,sy = unpack(poses[v.moddedTarget])
-                        drawCircle[v.moddedTarget] = {sx,sy,0,SPOT_RADIUS,{1,1,0,1},1,false,true,v.moddedTarget,true}
+                        drawCircle[v.moddedTarget] = {sx,sy,0,SPOT_RADIUS,yellow,1,false,true,v.moddedTarget,true}
 
                     else
-                        drawCircle[v.moddedTarget][5] = {1,1,0,1}
+                        drawCircle[v.moddedTarget][5] = yellow
                         drawCircle[v.moddedTarget][6] = 1
                     end
                 end
@@ -691,7 +729,7 @@ local function Evaluate(type, id, engineCmd)
             local closest
             local minDist = math.huge
             for i, id in ipairs(minesByDist) do
-                local defID = spGetUnitDefID(id)
+                local defID = mines[id]
                 if not staticBuildingDefID[defID] --[[or factoryDefID[defID]--]] then
                     if v.lastAcquiredSelect == id then
                         -- if we already picked that unit before, now we pick the building
@@ -798,7 +836,7 @@ local function Evaluate(type, id, engineCmd)
                 if factoryAround then
                     fromBuilderToBuilder = true
                 else
-                    local selDefID = s.defaultSelect and spGetUnitDefID(s.defaultSelect)
+                    local selDefID = s.defaultSelect and tracedDefID
                     if selDefID and controllableRepairerDefID[selDefID] then
                         fromBuilderToBuilder = true
                     end
@@ -825,7 +863,38 @@ local function Evaluate(type, id, engineCmd)
             v.moddedCmd = CMD_ATTACK
             return v.moddedCmd
         end
+        if vHas.gotAirUnit then
+            if not padAround and engineCmd == CMD_REARM then
+                padAround = s.defaultSelect or isAllied and airpadDefID[tracedDefID] and traced
+                -- if v.moddedTarget then
+                --     v.moddedTarget = false -- in case there is an ez targetted enemy close by
+                -- end
+                -- v.moddedTarget = padAround
+            elseif v.moddedTarget then -- we override the modded target to our pad if any
+                for id, defID in pairs(mines) do
+                    if airpadDefID[defID] then
+                        -- got a pad around the cursor that is not the closest but we take it anyway
+                        padAround = id
+                        break
+                    end
+                end
 
+            end
+
+            if padAround then
+                if drawCircle[padAround] then -- if the pad has been found through EzTarget
+                    drawCircle[padAround][5] = yellow
+                    drawCircle[padAround][6] = 1
+                end
+                v.moddedActiveCommand = 'Exclude'
+                if namecom ~= v.moddedActiveCommand then
+                    spSetActiveCommand(v.moddedActiveCommand:gsub(' ',''))
+                end
+                v.moddedCmd = CMD_EXCLUDE_PAD
+                v.moddedTarget = padAround
+                return v.moddedCmd
+            end
+        end
     end
     if namecom then
         v.moddedActiveCommand = false
@@ -1713,6 +1782,8 @@ do --- EzTarget ---
     local green = {unpack(f.COLORS.green)}
     green[4] = 0.7
     local lightgreen = {unpack(f.COLORS.lightgreen)}
+    local teal = {unpack(f.COLORS.teal)}
+    local yellow = {unpack(f.COLORS.yellow)}
     local lightred = {unpack(f.COLORS.lightred)}
     local orange = {unpack(f.COLORS.orange)}
     local yellow = {unpack(f.COLORS.yellow)}
@@ -1963,7 +2034,7 @@ do --- EzTarget ---
         if closestEnemy then
             -- local gx,gy,gz,x,y,z = spGetUnitPosition(closestEnemy,true)
             local sx,sy = unpack(poses[closestEnemy])
-            drawCircle[closestEnemy] = {sx,sy,0,SPOT_RADIUS,red,1,false,true,closestEnemy,true}
+            drawCircle[closestEnemy] = {sx,sy,0,SPOT_RADIUS,orange,1,false,true,closestEnemy,true}
             -- enemies[closestEnemy]=nil
         end
         if closestMine then
@@ -1974,10 +2045,10 @@ do --- EzTarget ---
             -- Echo("size is ", iconSizeByDefID[spGetUnitDefID(closestMine)])
             local defID = spGetUnitDefID(closestMine)
             local height = UnitDefs[defID].height
-            if poses[closestMine].corrected then
-                sx,sy = spWorldToScreenCoords(unpack(poses[closestMine].corrected))
-                drawCircle[closestMine .. 'bis'] = {sx,sy,0,SPOT_RADIUS,red,1,false,true,closestMine,true}
-            end
+            -- if poses[closestMine].corrected then
+            --     sx,sy = spWorldToScreenCoords(unpack(poses[closestMine].corrected))
+            --     drawCircle[closestMine .. 'bis'] = {sx,sy,0,SPOT_RADIUS,red,1,false,true,closestMine,true}
+            -- end
             -- mines[closestMine]=nil
         end
 
@@ -2051,7 +2122,7 @@ do --- EzTarget ---
         end
     end
     local tsort, tinsert = table.sort, table.insert -- much faster
-    EzTarget = function(getTarget, getSelect)
+    EzTarget = function(getTarget, getSelect, wantAllied)
 
         if cancelEz then return end
         if freeze then return end  
@@ -2066,7 +2137,7 @@ do --- EzTarget ---
         local th = 1--EZTARGET_THRESHOLD
         drawCircle = {} -- for ops and debug
         points={} -- for debug
-        enemies, mines={}, {}
+        enemies, mines, allied = {}, {}, {}
         local unitPool = {}
         local id, pos
         local _
@@ -2106,9 +2177,10 @@ do --- EzTarget ---
 
         local mindistEnemy, closestEnemy = huge
         local mindistMine, closestMine = huge
+        local mindistAllied, closestAllied = huge
         local wantEnemy = getTarget
         local wantMine = getSelect or (vHas.gotAirUnit and getTarget)
-        enemiesByDist = {}
+        -- enemiesByDist = {}
         minesByDist, mbd = {}, 0
         poses = {}
 
@@ -2128,10 +2200,10 @@ do --- EzTarget ---
             local unit = Units[id]
             if unit then
                 -- local isEnemy, isMine = not spIsUnitAllied(id), spGetUnitTeam(id) == v.myTeamID
-                local isEnemy, isMine = unit.isEnemy, unit.isMine
+                local isEnemy, isMine, isAllied = unit.isEnemy, unit.isMine, unit.isAllied
                 -- local defID = spGetUnitDefID(id)
                 local defID = unit.defID
-                if isEnemy and wantEnemy or isMine and wantMine then
+                if isEnemy and wantEnemy or isMine and wantMine or wantAllied and isAllied then
                     local bx,by,bz,x,y,z = unit:GetPos(3,true)
                     if x then
                         -- local x,y,z = spGetUnitPosition(id)
@@ -2202,7 +2274,7 @@ do --- EzTarget ---
                                         mindistEnemy = scrDist
                                         closestEnemy = id
                                     end
-                                    enemies[id]=scrDist
+                                    enemies[id]=defID
                                     poses[id] = {sx,sy,corrected = corrected}
                                 end
                             elseif isMine and wantMine and not (spGetUnitNoSelect(id, cached) or spGetUnitTransporter(id) or ignoreSelectDefID[defID]) then
@@ -2210,11 +2282,18 @@ do --- EzTarget ---
                                     mindistMine = scrDist
                                     closestMine = id
                                 end
-                                mines[id]=scrDist
+                                mines[id]=defID
                                 poses[id] = {sx,sy,corrected = corrected}
                                 mbd = mbd + 1
                                 minesByDist[mbd] = id
                                 -- tinsert(minesByDist,id)
+                            elseif isAllied and wantAllied and EzAlliedDefID[defID] then
+                                if scrDist<mindistAllied then
+                                    mindistAllied = scrDist
+                                    closestAllied = id
+                                end
+                                allied[id]=defID
+                                poses[id] = {sx,sy,corrected = corrected}
                             end
                         end
                     end
@@ -2222,30 +2301,43 @@ do --- EzTarget ---
             end
         end
         tsort(minesByDist,SortMines)
-        tsort(enemiesByDist,SortEnemies)
+        -- tsort(enemiesByDist,SortEnemies)
         -- f.Page(Spring.GetCameraState())
         -- Echo(str)
         if closestEnemy then
             -- local gx,gy,gz,x,y,z = spGetUnitPosition(closestEnemy,true)
             local sx,sy = unpack(poses[closestEnemy])
-            drawCircle[closestEnemy] = {sx,sy,0,SPOT_RADIUS,red,1,false,true,closestEnemy,true}
+            drawCircle[closestEnemy] = {sx,sy,0,SPOT_RADIUS,orange,1,false,true,closestEnemy,true}
             -- enemies[closestEnemy]=nil
         end
         if closestMine then
             -- local gx,gy,gz,x,y,z = spGetUnitPosition(closestMine,true)
             local sx,sy = unpack(poses[closestMine])
 
-            drawCircle[closestMine] = {sx,sy,0,SPOT_RADIUS,lightgreen,1,false,true,closestMine,true}
+            drawCircle[closestMine] = {sx,sy,0,SPOT_RADIUS,teal,1,false,true,closestMine,true}
             -- Echo("size is ", iconSizeByDefID[spGetUnitDefID(closestMine)])
             local defID = spGetUnitDefID(closestMine)
             local height = UnitDefs[defID].height
-            if poses[closestMine].corrected then
-                sx,sy = spWorldToScreenCoords(unpack(poses[closestMine].corrected))
-                drawCircle[closestMine .. 'bis'] = {sx,sy,0,SPOT_RADIUS,red,1,false,true,closestMine,true}
-            end
+            -- if poses[closestMine].corrected then
+            --     sx,sy = spWorldToScreenCoords(unpack(poses[closestMine].corrected))
+            --     drawCircle[closestMine .. 'bis'] = {sx,sy,0,SPOT_RADIUS,red,1,false,true,closestMine,true}
+            -- end
             -- mines[closestMine]=nil
         end
+        if closestAllied then
+            -- local gx,gy,gz,x,y,z = spGetUnitPosition(closestMine,true)
+            local sx,sy = unpack(poses[closestAllied])
 
+            drawCircle[closestAllied] = {sx,sy,0,SPOT_RADIUS,lightgreen,1,false,true,closestAllied,true}
+            -- Echo("size is ", iconSizeByDefID[spGetUnitDefID(closestMine)])
+            local defID = spGetUnitDefID(closestAllied)
+            local height = UnitDefs[defID].height
+            -- if poses[closestMine].corrected then
+            --     sx,sy = spWorldToScreenCoords(unpack(poses[closestAllied].corrected))
+            --     drawCircle[closestMine .. 'bis'] = {sx,sy,0,SPOT_RADIUS,red,1,false,true,closestAllied,true}
+            -- end
+            -- mines[closestMine]=nil
+        end
         ------ debugging show colored dots on max positions
         if Debug.EZ() then
             local n=1

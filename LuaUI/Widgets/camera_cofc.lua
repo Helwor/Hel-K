@@ -1708,17 +1708,16 @@ function Zoom(zoomin, shift, forceCenter, value,ignoreLimit)
 	local maxZoomSpeed = options.maxzoomspeed.value
 	local zoomDistFactor = options.zoomdistfactor.value
 	local zoomBase = options.zoombase.value
-	local zoomin = zoomin
-	if options.invertzoom.value then
-		zoomin = not zoomin
-	end
-
+    if options.invertzoom.value then
+        zoomin = not zoomin
+    end
 	local cs = GetTargetCameraState()
 	-- Echo("zoomin is ", zoomin)
 	--//ZOOMOUT FROM CURSOR, ZOOMIN TO CURSOR//--
-	if
-	(not forceCenter) and
-	((zoomin and options.zoomin.value == 'toCursor') or ((not zoomin) and options.zoomout.value == 'fromCursor'))
+	if	not forceCenter and (
+            zoomin and options.zoomin.value == 'toCursor'
+            or not zoomin and options.zoomout.value == 'fromCursor'
+        )
 	then
 		local onmap, gx,gy,gz = VirtTraceRay(mx, my, cs)
 
@@ -2816,14 +2815,14 @@ function widget:MouseWheel(wheelUp, value)
 	alt = alt and not options.disablealt.value
 
 	if ctrl then
-		return Tilt(shift, wheelUp and -1 or 1)
+		return Tilt(shift, wheelUp and 1 or -1)
 	elseif alt then
 		if overview_mode then --cancel overview_mode if Overview_mode + descending
-			local zoomin = not wheelUp
+			local descending = not wheelUp
 			if options.invertalt.value then
-				zoomin = not zoomin
+				descending = not descending
 			end
-			if zoomin then
+			if descending then
 				overview_mode = false
 			else return; end-- skip wheel if Overview_mode + ascending
 		end
@@ -2837,11 +2836,13 @@ function widget:MouseWheel(wheelUp, value)
 		end
 		if zoomin then
 			overview_mode = false
-		else return; end --skip wheel if Overview_mode + ZOOM-out
+		else 
+			return --skip wheel if Overview_mode + ZOOM-out
+		end
 	end
 
 	follow_timer = 0.6 --disable tracking for 1 second when middle mouse is pressed or when scroll is used for zoom
-	return Zoom(wheelUp, shift, nil, value)
+	return Zoom(not wheelUp, shift, nil, value)
 end
 local function FlipCamera()
 	ls_have = false

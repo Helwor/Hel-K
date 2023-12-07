@@ -4460,7 +4460,6 @@ function widget:MouseMove(x, y, dx, dy, button)
 
 			prev.lasP_To_Cur = lasP_To_Cur or 0
 			prev.llasP_To_Cur = llasP_To_Cur or 0
-			prev.
 			rail.n = railLength
 			rail.processed =   
 							   specs.n~=specsLength and (lasP and lasP.r)
@@ -4512,7 +4511,7 @@ function widget:MouseMove(x, y, dx, dy, button)
 		--updateRail()		
 		--end
 		--
-		prev.dist_drawn = prev.dist_drawn + (abs(prev.mx - mx)^2 + abs(prev.my - my)^2) ^ 0.5
+		prev.dist_drawn = prev.dist_drawn + ((prev.mx - mx)^2 + (prev.my - my)^2) ^ 0.5
 		prev.mx, prev.my = mx,my
 		prev.pos = pos
 		if rail[2] then

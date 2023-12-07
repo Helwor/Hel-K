@@ -35,7 +35,13 @@ local disarmUnits
 
 local RADAR_TIMEOUT = 30 * 12
 
-
+local airpadDefID = {}
+do
+    local airpadDefs = VFS.Include("LuaRules/Configs/airpad_defs.lua", nil, VFS.GAME)
+    for defID in pairs(airpadDefs) do
+        airpadDefID[defID] = true
+    end
+end
 
 
 
@@ -358,7 +364,7 @@ local function ApplyColor(id, color, color2, blink)
 	end
 
 end
-local function Treat(id,allySelUnits,unit, blink, debugInSight)
+local function Treat(id,defID,allySelUnits,unit, blink, debugInSight)
 	-- if spIsUnitVisible(id) and (not onlyOnIcons or spIsUnitIcon(id)) then
 		local color, color2
 		local x,y,z = GetUnitPos(id,0)
@@ -367,7 +373,7 @@ local function Treat(id,allySelUnits,unit, blink, debugInSight)
 			-- local hp,maxhp,_,_,bp = spGetUnitHealth(id)
 			local health = unit.health
 			local paralyzed
-			local hp,maxhp,bp, para1, para2
+			local hp,maxhp,paraDmg,bp
 			if health then
 				hp,maxhp, paraDmg,bp = health[1], health[2], health[3], health[5]
 				-- if not maxhp then
@@ -396,9 +402,11 @@ local function Treat(id,allySelUnits,unit, blink, debugInSight)
 						  -- unit.assisting and darkenedgreen
 						unit.isIdle and blue
 						or unit.autoguard and darkenedgreen
-						or unit.building and unit.manual and red
-						-- or unit.isFighting and turquoise
-						or unit.manual and (unit.actualCmd==90 and hardviolet or orange)
+						or unit.manual and (
+								unit.building and red
+								or unit.actualCmd==90 and hardviolet
+								or orange
+							)
 						or unit.isFighting and turquoise
 						or unit.waitManual and yellow
 						-- or unit.actualCmd == 90 and paleviolet
@@ -406,16 +414,22 @@ local function Treat(id,allySelUnits,unit, blink, debugInSight)
 					)
 
 			if not color then
-				local jumpReload = unit.isJumper and unit.isMine and spGetUnitRulesParam(id,'jumpReload')
-				if jumpReload then
-					color = jumpReload>=1 and darkenedgreen
-						  or jumpReload>=0.8 and lime
+				if unit.isJumper then
+					local jumpReload = unit.isJumper and unit.isMine and spGetUnitRulesParam(id,'jumpReload')
+					if jumpReload then
+						color = jumpReload>=1 and darkenedgreen
+							  or jumpReload>=0.8 and lime
+					end
+				elseif showCloaked and unit.isCloaked then
+				  alpha = 0.7
+				  color = paleblue
+				elseif not unit.isEnemy and airpadDefID[defID] then
+					if spGetUnitRulesParam(id, "padExcluded" .. myTeamID) == 1 then
+						color = copper
+					end
 				end
 			end
-			-- if not color and showCloaked and unit.isCloaked then
-			--   alpha = 0.7
-			--   color = paleblue
-			-- end
+
 			color2 = showHealth and health and (health<0.3 and red or health<0.6 and orange)
 
 			if debugInSight then
@@ -459,7 +473,7 @@ local function Treat(id,allySelUnits,unit, blink, debugInSight)
 
 				local mx,my = spWorldToScreenCoords(x,y,z)
 				if color2 then
-				  local list = lists[color2][strHealth]
+				  	local list = lists[color2][strHealth]
 
 					color2[4] = alphaHealth
 					glColor(color2)
@@ -550,7 +564,7 @@ local GlobalDraw = function()
 				-- end
 
 				if not (avoidLowCost and lowCostDefID[defID] or ignoreUnitDefID[defID]) then
-					Treat(id,allySelUnits, unit, blink, debugInSight)
+					Treat(id,defID,allySelUnits, unit, blink, debugInSight)
 				end
 			-- elseif not spGetUnitIsDead(id) and spValidUnitID(id) then
 				-- 	local defID = spGetUnitDefID(id)

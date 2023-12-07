@@ -1041,7 +1041,7 @@ function widget:MouseRelease(mx, my, mButton)
 	end
 
 	-- Cancel RMB line formations for selected commands if no formation has been drawn.
-	if (not usingContextCommand) and usingRMB and options.RMBLineFormation.value and #fNodes <= 1 then
+	if (not usingContextCommand) and usingRMB and options.RMBLineFormation.value and not fNodes[2] then
 		StopCommandAndRelinquishMouse()
 		return false
 	end
