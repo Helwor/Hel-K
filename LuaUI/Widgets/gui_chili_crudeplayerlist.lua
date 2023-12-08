@@ -500,10 +500,14 @@ local function GetUserControls(playerID, teamID, allyTeamID, isAiTeam, isDead, i
 	userControls.mainControl = Chili.Control:New {
 		name = playerID,
 		x = 0,
+		top = 0,
 		bottom = 0,
 		right = 0,
 		height = height,
 		padding = {0, 0, 0, 0},
+		-- itemPadding = {0, -5, 0, 0},
+		-- borderColor = {1,0,0,1},
+		-- backgroundColor = {0,0,1,1},
 		parent = parent
 	}
 
@@ -982,20 +986,36 @@ local function InitializePlayerlist()
 		backgroundColor = {0, 0, 0, 0},
 		color = {0, 0, 0, 0},
 		borderColor = {0, 0, 0, 0},
+		-- border = {0,0,0,0},
 		width = '100%',
 		height = '100%',
+		y = 13, 
+		bottom = 13,
+		-- top = 13,
+
 		-- minHeight = 100,
 		-- autosize = true,
 		-- scrollbarSize = 6,
 		horizontalScrollbar = false,
+        padding = {0,-7,0,0},
+        -- itemPadding = {0,-7,0,0},
+        -- itemMargin = {0,-7,0,0},
+        -- margin =  {0,-7,0,0},
+        -- itemPadding = {0,-25,0,0},
+	}
+	-- local stackPanel = Chili.StackPanel:New{height = 800, width = 800--[[, autoResize = true--]]}
+	header = Chili.Label:New{
+		caption = 'recap',
+
 	}
 	playerlistWindow = Chili.Window:New{
 		backgroundColor = {0, 0, 0, 0},
 		color = {0, 0, 0, 0},
 		parent = Chili.Screen0,
+		-- margin = {0,13,0,0},
 		dockable = true,
 		name = "Player List", -- NB: this exact string is needed for HUD preset playerlist handling
-		padding = {0, 0, 0, 0},
+		padding = {0, 0, 11, 0},
 		x = screenWidth - windowWidth,
 		y = math.floor(screenHeight/10),
 		width = windowWidth,
@@ -1008,13 +1028,12 @@ local function InitializePlayerlist()
 		tweakResizable = true,
 		minimizable = false,
 
-		children = {scrollPanel},
+		children = {
+			header,
+			scrollPanel
+		},
 	}
-	header = Chili.Label:New{
-		caption = 'recap',
-		parent = playerlistWindow
-	}
-	
+
 	local gaiaTeamID = Spring.GetGaiaTeamID
 	local teamList = Spring.GetTeamList()
 	for i = 1, #teamList do

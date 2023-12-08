@@ -298,7 +298,9 @@ function widget:UnitCommand(unitID, defID, team, cmd, params, opts)
         end
     elseif cmd == CMD_UNLOAD_UNIT and not opts.shift then
         local dropTable = toDrop[unitID]
-        dropTable.gx, dropTable.gy, dropTable.gz = unpack(params)
+        if dropTable then
+            dropTable.gx, dropTable.gy, dropTable.gz = unpack(params)
+        end
     elseif not opts.shift then
         local dropTable = toDrop[unitID]
         if dropTable then
