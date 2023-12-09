@@ -376,7 +376,7 @@ do
     local code={meta=4,internal=8,right=16,shift=32,ctrl=64,alt=128}
     CodeOptions = function(options)
         local coded = 0
-        for opt, isTrue in pairs(isTrue) do
+        for opt, isTrue in pairs(options) do
             if isTrue then coded=coded+code[opt] end
         end
         options.coded=coded
