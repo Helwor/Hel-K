@@ -164,7 +164,7 @@ local goodCommand = {
 
 local function AdjustForBuildDistance(unitID, params, lastMove)
     local range = spGetUnitEffectiveBuildRange(unitID)
-    Echo("lastMove is ", lastMove)
+    -- Echo("lastMove is ", lastMove)
     if not lastMove then
         lastMove = {spGetUnitPosition(unitID)}
     end
@@ -473,6 +473,9 @@ local function DoSelectionLoadOLD()
 	Spring.SetActiveCommand(nil)
 end
 
+local function IsBusy(transID)
+    return waitForLoad[transID] or spGetUnitCurrentCommand(transID) == CMD_LOAD_UNITS
+end
 
 local function DoSelectionLoad()
 	-- Find the units which can transport and the units which are transports
@@ -482,7 +485,6 @@ local function DoSelectionLoad()
 	local heavy, h = {}, 0
     -- local unitDefs = {}
     local selTypes = WG.selectionDefID or spGetSelectedUnitsSorted()
-
     ----------- Pick all team units if needed 
 
     local transSelected
@@ -495,18 +497,22 @@ local function DoSelectionLoad()
     if not transSelected and noSelectNeeded then
         local units = spGetTeamUnitsByDefs(myTeamID, indexedLightTrans)
         for i, unitID in ipairs(units) do
-            local transportUnits = spGetUnitIsTransporting(unitID)
-            if transportUnits and not transportUnits[1] then
-                lT = lT + 1
-                lightTrans[lT] = unitID
+            if not IsBusy(unitID) then
+                local transportUnits = spGetUnitIsTransporting(unitID)
+                if transportUnits and not transportUnits[1] then
+                    lT = lT + 1
+                    lightTrans[lT] = unitID
+                end
             end
         end
         units = spGetTeamUnitsByDefs(myTeamID, indexedHeavyTrans)
         for i, unitID in ipairs(units) do
-            local transportUnits = spGetUnitIsTransporting(unitID)
-            if transportUnits and not transportUnits[1] then
-                hT = hT + 1
-                heavyTrans[hT] = unitID
+            if not IsBusy(unitID) then
+                local transportUnits = spGetUnitIsTransporting(unitID)
+                if transportUnits and not transportUnits[1] then
+                    hT = hT + 1
+                    heavyTrans[hT] = unitID
+                end
             end
         end
     end
@@ -516,17 +522,19 @@ local function DoSelectionLoad()
         if transDefID[defID] then
             local isLightT = lightTransDefID[defID]
             for i, unitID in ipairs(units) do
-				local transportUnits = spGetUnitIsTransporting(unitID)
-				if transportUnits and not transportUnits[1] then
-                    if isLightT then
-						lT = lT + 1
-						lightTrans[lT] = unitID
-                        -- unitDefs[unitID] = defID
-                    else
-   						hT = hT + 1
-   						heavyTrans[hT] = unitID
-                        -- unitDefs[unitID] = defID
-    				end
+                if not IsBusy(unitID) then
+    				local transportUnits = spGetUnitIsTransporting(unitID)
+    				if transportUnits and not transportUnits[1] then
+                        if isLightT then
+    						lT = lT + 1
+    						lightTrans[lT] = unitID
+                            -- unitDefs[unitID] = defID
+                        else
+       						hT = hT + 1
+       						heavyTrans[hT] = unitID
+                            -- unitDefs[unitID] = defID
+        				end
+                    end
                 end
             end
 		elseif heavyDefID[defID] then
@@ -615,7 +623,6 @@ local function DoSelectionLoad()
                     else
                         spGiveOrderToUnit(unitID, CMD_WAIT, EMPTY_TABLE, CMD_OPT_RIGHT)
                     end
-					-- CopyMoveThenUnload(transID, unitID)
 					waitForLoad[transID] = unitID
                     new = true
 				end
@@ -673,6 +680,10 @@ end
 function widget:Shutdown()
     -- widgetHandler:DeregisterGlobal(widget, 'taiEmbark')
 end
+
+
+
+
 ------------------
 -- Hungarian methods
 -- copied from Custom Formation 2 and modified a bit

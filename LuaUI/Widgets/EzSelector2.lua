@@ -1026,7 +1026,10 @@ local hotkeysCombos={
 				default = {name={'shieldshield','amphlaunch'}},
 				-- defs = {['?']={'!isTransport','!isTransported'}},
 				-- defs = {'!isTransport','!isTransported',['?'] = {['!name']='cloakaa', {['name']='cloakaa',['!fireState']=0}}   },
-				defs = {['?'] = {['!name']='cloakaa', {['name']='cloakaa',['!fireState']=0}}   },
+				defs = {
+					['!name'] = {'gunshiptrans','gunshipheavytrans'},
+					['?'] = {['!name']='cloakaa', {['name']='cloakaa',['!fireState']=0}}   
+				},
 				-- defs={
 				-- 	   -- SYNTAXE: OPERATORS NOT and OR 
 				-- 	   '!isComm','isUnit','!isAthena', ['!family']='plane', -- '!' means NOT
@@ -1049,7 +1052,7 @@ local hotkeysCombos={
 					-- switch definitions until one is matching immediately, if none, the loop will stop once all defs have been tested
 					-- the starting switch is incremented at each new call
 					{
-						XAND = {
+						XAND = { -- XAND accept to add hover or amph if some ships has been found
 							family ={'hover','amph'}
 						},
 						family='ship',['!class']={'conunit','raider'}
@@ -1130,7 +1133,7 @@ local hotkeysCombos={
 
 
 
-				{name='Army with raiders',
+			{name='Army with raiders',
 				method='cylinder',
 				keys={'N_1',2,'doubleTap'},--syntaxe: N_1 (KEYSIMS),  2 (as it appear on keyboard)-- both format work for the comfort of the user
 				shift = true,
@@ -1152,7 +1155,7 @@ local hotkeysCombos={
 					   -- for the sake of visibility and simplicity, you don't need to specify ['?']={subest1,subset2}, it will be implictly assumed
 					   -- , instead {subest1,subest2} is enough, see the macro 'One Commando' for an example
 				},
-
+				share_radius = 'Ground Army / GS / ships',
 				color={1.0, 0.9, 0.9, 0.8},fading=0.6
 			},
 			-- 	{name='Army with raiders',
@@ -1494,7 +1497,7 @@ local hotkeysCombos={
 			defs={
 				['?'] = {
 					['?name']={'shieldbomb','cloakbomb','amphbomb','gunshipbomb','jumpbomb',},
-					{ name={'gunshiptrans','gunshipheavytrans'},'!isTransporting' }
+					-- { name={'gunshiptrans','gunshipheavytrans'},'!isTransporting' }
 				}
 			},
 
@@ -1515,7 +1518,7 @@ local hotkeysCombos={
 			must_have = {
 				['?'] = {
 					['?name']={'shieldbomb','cloakbomb','amphbomb','gunshipbomb','jumpbomb'},
-					{ name={'gunshiptrans','gunshipheavytrans'},'!isTransporting' }
+					-- { name={'gunshiptrans','gunshipheavytrans'},'!isTransporting' }
 				}
 			},
 			keys={'?AIR','N_1','LClick','doubleLClick','?spam'},
@@ -1529,7 +1532,7 @@ local hotkeysCombos={
 			same_transporting_state = true,
 			share_radius = 'One Bomb',
 			disable_SM=true,
-			-- call_on_fail = 'Sub',
+			call_on_fail = 'One Bomb',
 			shared_prev='One Bomb',}, -- use same 'previous' table as the cited macro
 
 
@@ -1581,6 +1584,7 @@ local hotkeysCombos={
 			,method='cylinder'
 			,add_last_acquired = true
 			-- ,from_cursor=true
+			,must_have = {	['p:cloak_shield']=2,[spGetUnitIsActive]=true}
 			,keys={'?AIR','N_1','RClick','longClick'}
 			,defs={	['p:cloak_shield']=2,[spGetUnitIsActive]=true}
 			,prefer = {'isUnit'}
@@ -1822,7 +1826,9 @@ local hotkeysCombos={
 			,keep_on_fail=true
 			,hasStructure = true
 			-- same_units=true,
-			,call_on_fail = "Shields"
+			-- ,call_on_fail = "Shields"
+			,call_on_fail = 'Shields with raiders'
+
 			,share_radius = 'Cloaker'
 			,shared_prev='Cloaker'}, -- use same 'previous' table as the cited macro
 

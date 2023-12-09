@@ -269,7 +269,7 @@ function widget:UnitFromFactory(id, defID, team, factID, factDefID, userOrders)
 	-- verify[id] = responseTime
 	-- debug('['..time..'page: '..page..']'..'unit from fac #'.. id .. ', timeout set to ' .. responseTime)
 	verify[id] = page + 3
-	debug('['..time..'page: '..page..']'..'unit from fac #'.. id .. ', timeout set to page' .. page + 2)
+	debug('['..time..'page: '..page..']'..'unit from fac #'.. id .. ', timeout set to page' .. page + 3)
 end
 
 function widget:UnitFinished(id, defID, team)

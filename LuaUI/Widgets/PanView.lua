@@ -876,7 +876,7 @@ function widget:MousePress(mx, my, button, fake)
 
         alt, ctrl, meta, shift = spGetModKeyState()
         local _,cmd,num,aCom = spGetActiveCommand()
-
+        
 
 
         local keyGood = (v.active or meta) and not (alt or ctrl or shift)
@@ -898,12 +898,12 @@ function widget:MousePress(mx, my, button, fake)
             elseif cs.mode~=1 and cs.mode~=4 then
                 reason = 'bad camera mode'
             else
-                if usedAcom and aCom then
-                    spSetActiveCommand(0)
-                    aCom = nil
-                    usedAcom = false
-                    Echo('acom used',FormatTime(spGetGameSeconds()))
-                end
+                -- if usedAcom and aCom then
+                --     spSetActiveCommand(0)
+                --     aCom = nil
+                --     usedAcom = false
+                --     Echo('acom used',FormatTime(spGetGameSeconds()))
+                -- end
                 local cancelFight = aCom == 'Fight' and cfg.forceOnFight
                 if (aCom~=nil and not cancelFight) and  not v.active then
                     reason = 'aCom ' .. cmd ..' = ' .. tostring(aCom)
