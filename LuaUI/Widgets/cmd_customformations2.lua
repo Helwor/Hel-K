@@ -16,6 +16,8 @@ local Echo = Spring.Echo
 VFS.Include("LuaRules/Configs/customcmds.h.lua")
 
 
+local reorderGroups = true
+
 
 local commandMap
 local GetMiniMapFlipped = Spring.Utilities.IsMinimapFlipped
@@ -41,7 +43,7 @@ local overrideCmdSingleUnit = {
 }
 
 options_path = 'Settings/Interface/Line Formations'
-options_order = { 'spreadtypes', 'ignorespreadsize', 'rank_gap', 'drawmode_v2', 'linewidth', 'dotsize', 'overrideGuard','RMBLineFormation' }
+options_order = { 'spreadtypes','reorder_groups', 'ignorespreadsize', 'rank_gap', 'drawmode_v2', 'linewidth', 'dotsize', 'overrideGuard','RMBLineFormation' }
 options = {
 	spreadtypes = {
 		name = "Evenly spread unit types along lines",
@@ -52,6 +54,16 @@ options = {
 			{key='move', name='For movement orders', desc='As below, excluding commands that do not cause units to walk to the line (such as Force Fire).'},
 			{key='all', name='For all orders', desc='Units of the same type recieve orders spread evenly along the line. Order distance is still minimised within each type.'},
 		},
+	},
+	reorder_groups = {
+		type = 'bool',
+		name = 'Reorder spread groups',
+		desc = 'Reorder groups by closest unit of each group to the first node (avoiding cross walk in small number, if possible)',
+		value = reorderGroups,
+		OnChange = function(self)
+			reorderGroups = self.value
+		end,
+
 	},
 	ignorespreadsize = {
 		name = 'Merge spread group size',
@@ -288,6 +300,7 @@ local spGetActiveCommand = Spring.GetActiveCommand
 local spSetActiveCommand = Spring.SetActiveCommand
 local spGetDefaultCommand = Spring.GetDefaultCommand
 local spFindUnitCmdDesc = Spring.FindUnitCmdDesc
+local spGetSelectedUnitsSorted = Spring.GetSelectedUnitsSorted
 local spGetModKeyState = Spring.GetModKeyState
 local spGetInvertQueueKey = Spring.GetInvertQueueKey
 local spIsAboveMiniMap = Spring.IsAboveMiniMap
@@ -424,38 +437,80 @@ end
 
 local function GetExecutingUnits(cmdID)
 	local units, n = {}, 0
-	local selUnits = spGetSelectedUnits()
-	for i = 1, #selUnits do
-		local uID = selUnits[i]
-		if CanUnitExecute(uID, cmdID) then
-			n = n + 1
-			units[n] = uID
+	-- local selUnits = spGetSelectedUnits()
+	-- for i = 1, #selUnits do
+	-- 	local uID = selUnits[i]
+	-- 	if CanUnitExecute(uID, cmdID) then
+	-- 		n = n + 1
+	-- 		units[n] = uID
+	-- 	end
+	-- end
+	local selTypes = WG.selectionDefID or spGetSelectedUnitsSorted()
+	for defID, u in pairs(selTypes) do
+		if CanUnitExecute(u[1], cmdID) then
+			units[defID] = u
 		end
 	end
 	return units
 end
 
+
+local function merge(T,defIDs)
+	local n = 0
+	for _, units in pairs(defIDs) do
+		for i = 1, #units do
+			n = n + 1
+			T[n] = units[i]
+		end
+	end
+	return T
+end
 local function GetFormationRanks(mUnits, cmdID)
 	if not movementCmds[cmdID] then
-		return {mUnits}
+		return {merge({}, mUnits)}
 	end
 
 	local ranks = {}
-
-	for i = 1, #mUnits do
-		local unit = mUnits[i]
-		local unitDefID = Spring.GetUnitDefID(unit)
-		local unitRank = formationRank[unit] or (unitDefID and defaultRank[unitDefID]) or 2
-		if not ranks[unitRank] then
-			ranks[unitRank] = {}
+	-- local singleInEachType = true
+	for defID, u in pairs(mUnits) do
+		-- if singleInEachType and u[2] then
+		-- 	singleInEachType = false
+		-- end
+		for i, id in ipairs(u) do
+			local unitRank = formationRank[id] or (defaultRank[defID]) or 2
+			local rank = ranks[unitRank]
+			if not rank then
+				rank = {}
+				ranks[unitRank] = rank
+			end
+			rank[#rank + 1] = id
 		end
-		local rank = ranks[unitRank]
-		rank[#rank + 1] = unit
 	end
-
+	-- if singleInEachType then
+	-- 	return {merge({}, mUnits)}
+	-- end
 	return ranks
 end
+-- local function GetFormationRanks(mUnits, cmdID)
+-- 	if not movementCmds[cmdID] then
+-- 		return {mUnits}
+-- 	end
 
+-- 	local ranks = {}
+
+-- 	for i = 1, #mUnits do
+-- 		local unit = mUnits[i]
+-- 		local unitDefID = Spring.GetUnitDefID(unit)
+-- 		local unitRank = formationRank[unit] or (unitDefID and defaultRank[unitDefID]) or 2
+-- 		if not ranks[unitRank] then
+-- 			ranks[unitRank] = {}
+-- 		end
+-- 		local rank = ranks[unitRank]
+-- 		rank[#rank + 1] = unit
+-- 	end
+
+-- 	return ranks
+-- end
 local function AddFNode(pos)
 
 	local px, pz = pos[1], pos[3]
@@ -639,7 +694,7 @@ local function SendSetWantedMaxSpeed(alt, ctrl, meta, shift)
 	end
 end
 local function GetFormationGroups(cmdID, units)
-	if options.spreadtypes.value == "none" or (options.spreadtypes.value == "move" and not movementCmds[cmdID]) then
+	if options.spreadtypes.value == "never" or (options.spreadtypes.value == "move" and not movementCmds[cmdID]) then
 		return {units}
 	end
 
@@ -739,8 +794,7 @@ local function TweakTarget(pos, mx, my, acquiredTarget, singleNode)
 		targType, id = CulledTraceScreenRay(mx, my, false, inMinimap)
 		if targType == 'feature' then
 			id = id + maxUnits
-		end
-		if targType ~= 'unit' and targType ~= 'feature' then
+		elseif targType ~= 'unit' then
 			id = false
 		end
 	end
@@ -924,8 +978,8 @@ function widget:MousePress(mx, my, mButton, byEz)
 	-- 	StopCommandAndRelinquishMouse()
 	-- 	return
 	-- end
-	-- Is this line a path candidate (We don't do a path off an overridden command)
 	singlePoint = selCount == 1 and noPathable[usingCmd]
+	-- Is this line a path candidate (We don't do a path off an overridden command)
 	pathCandidate = not singlePoint and 
 		(not overriddenCmd) and (selCount==1 or (alt and not requiresAlt[usingCmd]))
 	-- Echo("noPathable[usingCmd] is ", noPathable[usingCmd])
@@ -1033,6 +1087,34 @@ function widget:MouseMove(mx, my, dx, dy, mButton)
 end
 
 
+
+local function ReorderGroupsToFirstNode(groups, interpNodes) -- reorder the groups so the closest unit of each group goes to the first nodes
+	if not groups[2] then
+		return
+	end
+	local groupLen = #groups
+	local nodeLen = #interpNodes
+	local closestGroups = {}
+	local nx, ny, nz = unpack(interpNodes[1])
+	local sortClosestGroups = function(groupA, groupB)
+		return closestGroups[groupA] < closestGroups[groupB]
+	end
+	for g, group in ipairs(groups) do
+		local minDist = math.huge
+		for i, id in ipairs(group) do
+			local x,y,z = spGetUnitPosition(id)
+			if x then
+				local dist = ((x - nx)^2 + (z - nz)^2)^0.5
+				if dist < minDist then
+					minDist = dist
+				end
+			end
+		end
+		closestGroups[group] = minDist
+	end
+	table.sort(groups, sortClosestGroups)
+end
+
 function widget:MouseRelease(mx, my, mButton)
 	-- Cancel command by pressing the other mouse button.
 	if (usingRMB) ~= (mButton == 3) then
@@ -1065,7 +1147,7 @@ function widget:MouseRelease(mx, my, mButton)
 	local usingFormation = true
 
 	-- Override checking
-	if overriddenCmd and ((not overrideCmdSingleUnit[overriddenCmd]) or #fNodes < SMALL_FORMATION_THRESHOLD) then
+	if overriddenCmd and (not overrideCmdSingleUnit[overriddenCmd] or not fNodes[SMALL_FORMATION_THRESHOLD + 1]) then
 		local targetID
 		local targType, targID = CulledTraceScreenRay(mx, my, false, inMinimap)
 		if targType == 'unit' then
@@ -1138,7 +1220,7 @@ function widget:MouseRelease(mx, my, mButton)
 			-- Order is a formation
 			-- Are any units able to execute it?
 			local mUnits = GetExecutingUnits(usingCmd)
-			if mUnits[1] then
+			if next(mUnits) then
 				local ranks = GetFormationRanks(mUnits, usingCmd)
 				local formationNodes = GetFormationNodes(ranks)
 
@@ -1147,7 +1229,9 @@ function widget:MouseRelease(mx, my, mButton)
 					if units then
 						local interpNodes = formationNodes[rank]
 						local groups = GetFormationGroups(usingCmd, units)
-
+						if reorderGroups then
+							ReorderGroupsToFirstNode(groups, interpNodes)
+						end
 						-- Assign nodes to groups
 						local groupNodes = {}
 						for i = 1, #groups do
@@ -1385,13 +1469,13 @@ local function DrawFormationLines(vertFunction, lineStipple)
 	glLineStipple(lineStipple, 4095)
 	glLineWidth(options.linewidth.value)
 
-	if #fNodes > 1 then
+	if fNodes[2] then
 		SetColor(usingCmd, 1.0)
 		glBeginEnd(GL_LINE_STRIP, vertFunction, fNodes)
 		glColor(1,1,1,1)
 	end
 
-	if #dimmNodes > 1 then
+	if dimmNodes[2] then
 		SetColor(dimmCmd, dimmAlpha)
 		glBeginEnd(GL_LINE_STRIP, vertFunction, dimmNodes)
 		glColor(1,1,1,1)
@@ -1414,7 +1498,7 @@ function widget:DrawWorld()
 		DrawFormationLines(tVerts, 2)
 	end
 	-- Draw dots when no path is drawn AND nodenumber is high enough AND drawmode_v2 for formations is not "lines" only AND command not canceled
-	if not pathCandidate and #fNodes > 1 and options.drawmode_v2.value ~= "lines" and lineLength > 0 then
+	if not pathCandidate and fNodes[2] and options.drawmode_v2.value ~= "lines" and lineLength > 0 then
 		local camX, camY, camZ = spGetCameraPosition()
 		local at, p = CulledTraceScreenRay(Xs,Ys,true,false,false)
 		if at == "ground" then
@@ -1491,7 +1575,7 @@ function widget:Update(deltaTime)
 		dimmNodes = {}
 		widgetHandler:RemoveWidgetCallIn("Update", self)
 
-		if #fNodes == 0 then
+		if not fNodes[1] then
 			widgetHandler:RemoveWidgetCallIn("DrawWorld", self)
 			widgetHandler:RemoveWidgetCallIn("DrawInMiniMap", self)
 		end
@@ -1515,9 +1599,9 @@ end
 ---------------------------------------------------------------------------------------------------------
 
 function MatchUnitsToNodes(nodes, units, shifted)
-	if (#units == 1) then
+	if (not units[2]) then
 		return {{units[1], nodes[1]}}
-	elseif (#units <= maxHungarianUnits) then
+	elseif not units[maxHungarianUnits + 1] then
 		return GetOrdersHungarian(nodes, units, #units, shift and not meta)
 	else
 		return GetOrdersNoX(nodes, units, #units, shift and not meta)
