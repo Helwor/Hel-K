@@ -795,7 +795,7 @@ end
 function widget:UnitReverseBuilt(id--[[, unitDefID, unitTeam--]])
 	local unit = Units[id]
 	if unit then
-		unit.checkHealth = true
+		unit.checkHealth = not ignoreHealthUnitDefID[defID]
 	end
 end
 function widget:MouseWheel()
