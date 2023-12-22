@@ -20,6 +20,10 @@ local f = VFS.Include("LuaUI\\Widgets\\UtilsFunc.lua")
 local wh
 include('keysym.h.lua')
 local KEYSYMS = KEYSYMS
+
+local allowWreckageInfo = false
+
+
 -- speedups
 local spGetModKeyState          = Spring.GetModKeyState
 local spGetKeyState             = spGetKeyState
@@ -42,6 +46,7 @@ local spSetMouseCursor          = Spring.SetMouseCursor
 local spWarpMouse               = Spring.WarpMouse
 
 local spGetUnitDefID            = Spring.GetUnitDefID
+local spGetFeatureDefID         = Spring.GetFeatureDefID
 local spSelectUnitArray         = Spring.SelectUnitArray
 local spGetSelectedUnits        = Spring.GetSelectedUnits
 local glPushMatrix              = gl.PushMatrix
@@ -54,6 +59,8 @@ local glPopMatrix               = gl.PopMatrix
 local min,max,round,sqrt,abs, atan2, pi = math.min,math.max,math.round,math.sqrt,math.abs,math.atan2, math.pi
 
 local CMD_FIGHT = CMD.FIGHT
+
+local MOUSE1 = {'mouse1'}
 
 
 local page = 0
@@ -83,7 +90,8 @@ local cs = Spring.GetCameraState()
 
 --
 -- NOTE: the real height will change the size of world on screen depending on the FOV
-local cfg = {
+
+local cfg = { -- default option values
     MAX_TOP_ALTITUDE = max(mapSizeX, mapSizeZ) * 5/3
     ,MAX_MIN_ZOOM_BACK_RATIO = 0.95
     ,maxTACam = max(mapSizeX, mapSizeZ) * 5/3 -- this give the max possible altitude for TA cam -- unfortunately very low FOV will not allow to see all the map with TA cam
@@ -94,7 +102,7 @@ local cfg = {
     ,zoom_choice = 'auto_zoom_out'
     ,altitude_ratio = 0.8 -- this is the current height ratio of TA Cam  maxHeight
 
-    ,wait_before_panning = false -- false or some value in second
+    -- ,wait_before_panning = 0 -- some value in second -- removed, it's useless
     ,smoothness = 0.13
     ,smoothness_zoom = 0.13
     ,smoothness_zoom_back = 0.2
@@ -107,7 +115,7 @@ local cfg = {
     ,use_origin_height = false
 
     ,auto_zoom_out = true -- auto zoom out when v.panning start
-    ,onlyUnitInfoWhenCentered = true -- don't retain the panning because mouse is above a unit, unless the mouse has been centered
+    -- ,onlyUnitInfoWhenCentered = true -- don't retain the panning because mouse is above a unit, unless the mouse has been centered
     ,auto_zoom_in = false -- auto zoom in when v.panning start with no zoom back -- false or threshold
     ,zoom_in = 2000 --2000-- zoom_in at this height with same keys when already zoomed out // changed to cs.height dynamically now
     ,min_zoom_back = 5000
@@ -120,7 +128,9 @@ local cfg = {
     ,follow_ground = true -- make the camera follow the ground during the panning for COFC mode, TA cam use it by default
     ,clamp = 1.15 -- how much the center view can go out of the map for COFC -- false for no limit
     ,forceOnFight = true
-    ,late_space_tol = 0
+    ,late_space_tol = 0 -- how late the space press  after the click is tolerated
+    ,space_info_height = 1800 -- how high we must be to totally suppress the space click info panel
+    ,suppress_wreckage_info = true -- are we suppressing the space click on wreckages
 --
 }
 -- this old formula is good for default cam mode, but COFC can go beyond
@@ -134,9 +144,11 @@ end
 
 options_path = 'Hel-K/PanView'
 options_order = {'help','zoom_choice'
-    ,'late_space_tol'
     ,'lbl_auto_zoom_out','altitude_ratio','min_zoom_back','min_zoom_back_ratio'
-    ,'lbl_auto_zoom_in','zoom_in'}
+    ,'lbl_auto_zoom_in','zoom_in'
+    ,'lbl_other','late_space_tol','space_info_height','suppress_wreckage_info'
+    -- ,'wait_before_panning' -- removed it's useless, but working
+}
 options = { -- TODO finish adding options
     help = {
         name = 'Descrition',
@@ -153,7 +165,7 @@ options = { -- TODO finish adding options
         value = cfg.zoom_choice,
         items = {
             {key = 'auto_zoom_out',         name='Auto Zoom Out'},
-            {key = 'auto_zoom_in',          name='Auto Zoom In'},
+            {key = 'auto_zoom_in',          name='Auto Zoom In', desc = 'NOT FULLY IMPLEMENTED'},
             {key = 'no_zoom',               name='No Zoom'},
         },
         OnChange = function(self)
@@ -246,6 +258,41 @@ options = { -- TODO finish adding options
             cfg[self.key] = self.value
         end
     },
+    lbl_other = {
+        name='Other',
+        type='label',
+    },
+    space_info_height = {
+        name = 'SPACE Info Panel suppression',
+        desc = 'Above which height the info panel is suppressed totally',
+        type = 'number',
+        value = cfg.space_info_height,
+        min = 0, max = 8000, step = 100,
+        OnChange = function(self)
+            cfg[self.key] = self.value
+        end,
+
+    },
+    suppress_wreckage_info = {
+        name = 'Suppress SPACE Info On Wreckage ',
+        type = 'bool',
+        value = cfg.suppress_wreckage_info,
+        noHotkey = true,
+        OnChange = function(self)
+            cfg[self.key] = self.value
+        end,
+
+    },
+    -- wait_before_panning = { -- removed it's useless
+    --     name = 'Wait Before Panning',
+    --     type = 'number',
+    --     value = cfg.wait_before_panning,
+    --     min = 0, max = 2, step = 0.01,
+    --     OnChange = function(self)
+    --         cfg[self.key] = self.value
+    --     end,
+
+    -- },
     late_space_tol = {
         name = 'Late Space Tolerance',
         desc = 'How long can SPACE be pressed after the click',
@@ -256,6 +303,9 @@ options = { -- TODO finish adding options
             cfg[self.key] = self.value
         end
     },
+
+
+
 }
 local function UpdateOption(key,value,path) -- much faster than reopening the panel
     local opt = options[key]
@@ -367,7 +417,7 @@ end
 
 table.insert(options_order,'lbl_extra')
 options.lbl_extra = {
-    type = 'label', name = 'Extra'
+    type = 'label', name = 'RAW options (experimental)'
 }
 local exception = {
     MAX_TOP_ALTITUDE=true,
@@ -569,7 +619,7 @@ end
 local function SetCameraTarget(cs,x, y, z, transTime)
     -- NOTE: the dx,dy,dz are not correctly set in the camera state if  moving or titlting the camera camera before doing this
 -- in normal TA cam, px,py,pz is the ground position where the cam look at, height is the distance between the ground position and the cam
--- in free cam (COFC) px,py,pz is the position of the camera itself, there is no height prop
+-- in free cam (COFC) px,py,pz is the position of the camera itself, there is no height prop (but we make it arbitrarily in this widget)
     if cs.mode ~= 4 then
         cs.px, cs.pz = x,z
         spSetCameraState(cs,transTime)
@@ -928,17 +978,22 @@ function widget:MousePress(mx, my, button, fake)
                     if not MakeStatsWindow then
                         MakeStatsWindow=WG.MakeStatsWindow
                     end
-                    if not v.active and Cam.relDist < 1800 then
-                        if not GetUnitUnderCursor then GetUnitUnderCursor=WG.PreSelection_GetUnitUnderCursor end
+                    if not v.active and Cam.relDist <= cfg.space_info_height then
+                        -- if not GetUnitUnderCursor then GetUnitUnderCursor=WG.PreSelection_GetUnitUnderCursor end
                         
                         
                         if SmoothCam then wh:RemoveWidgetCallIn("Update", SmoothCam) end
                         -- memorize the unit if the v.panning started with a unit under cursor
                         -- if not unit then
-                            unit = GetUnitUnderCursor(false,true)
-                            if unit then
-                                -- Echo('UNIT',os.clock())
+                            -- unit = GetUnitUnderCursor(false,true)
+                            local type
+                            type, unit = spTraceScreenRay(mx,my)
+                            if (type ~= 'feature' or cfg.suppress_wreckage_info) and type ~= 'unit' then
+                                unit = false
                             end
+                            -- if unit then
+                            --     Echo('UNIT',unit, os.clock())
+                            -- end
                         -- end
                     end
                     spSetMouseCursor('none')
@@ -1033,7 +1088,7 @@ function widget:MousePress(mx, my, button, fake)
                                 if pos then
                                     -- if unit and cfg.onlyUnitInfoWhenCentered then
                                     --     --- helper to not trigger the info unit  when clicking without dragging, in order to effectively slide briefly the pos of cam
-                                    --     if cs.height > 3000 then
+                                    --     if cs.relHeight > 3000 then
                                     --         local lastpx, lastpy, lastpz = unpack(cs.viewPos or {0,0,0})
                                     --         -- Echo(
                                     --         --     abs(lastpx-pos[1]) > lastpx*0.10
@@ -1198,6 +1253,7 @@ local function Move(mx,my,dx,dy)
     -- Echo("mx, my is ", mx, my)
     spSetMouseCursor('none')
     -- Echo('moving, unit?',unit)
+    local time = os.clock()
     if cfg.wait_before_panning and time-v.started_time < cfg.wait_before_panning then
         return
     end
@@ -1211,7 +1267,6 @@ local function Move(mx,my,dx,dy)
     v.mouse_delta = (dx^2 + dy^2)^0.5
     -- Echo("mx,my is ", mx,my)
     -- Echo("dx,dy is ", dx,dy)
-    local time = os.clock()
     local move_time = time-v.mouse_time
      -- Echo("v.mouse_delta is ", v.mouse_delta,  (v.amp_mod * v.flip * (v.ori_my - my)))
     v.mouse_time = time
@@ -1449,7 +1504,7 @@ function widget:KeyPress(key, mods, isRepeat)
                                 presstime = 0
                                 lastclick, lastclick_time = 0, 0
                                 -- Echo(str)
-                                Spring.SendCommands({'mouse1'}) -- resend a mouse press to apply the panning
+                                Spring.SendCommands(MOUSE1) -- resend a mouse press to apply the panning
                                 return true
                             end
                         end
@@ -1729,9 +1784,30 @@ function widget:MouseRelease(mx, my, button, fake)
         -- normal behaviour, panning didnt really happen
         if not v.move then
             if Tip_Widget then
-                local ud = UnitDefs[spGetUnitDefID(unit)]
-                if ud then
-                    MakeStatsWindow(ud, mx, my, unit)
+                local defID = spGetUnitDefID(unit)
+                if defID then
+                    local def = UnitDefs[defID]
+                    if def then
+                        MakeStatsWindow(def, mx, my, unit)
+                    end
+                elseif allowWreckageInfo then
+                    local fDefID = spGetFeatureDefID(unit)
+                    if fDefID then
+                        local fdef = FeatureDefs[fDefID]
+                        local unitName
+                        if fdef.customParams and fdef.customParams.unit then
+                            unitName = fd.customParams.unit
+                        else
+                            unitName =  fdef.name and fdef.name:gsub('(.*)_.*', '%1') --filter out _dead or _dead2 or _anything
+                        end
+                        if unitName then
+                            local def = UnitDefNames[unitName]
+                            if def then
+                                MakeStatsWindow(def, mx, my, unit)
+                            end
+                        end
+
+                    end
                 end
             end
         else
@@ -1836,7 +1912,8 @@ function widget:MouseWheel(up,value)
     end
 
     if not v.zoomed_in then
-        local update =  not v.height_backup or cs.relHeight>v.height_backup*0.98
+        -- local update =  not v.height_backup or cs.relHeight>v.height_backup*0.98
+        local update = true
         local new_altitude_ratio
         if v.height_backup then
             new_altitude_ratio = cfg.altitude_ratio*(1-value/10)
@@ -1884,11 +1961,14 @@ function widget:MouseWheel(up,value)
         if cfg.min_zoom_back_ratio then
             new_zoom_back = math.max(cfg.min_zoom_back_ratio * new_altitude, v.height_backup or 0)
         end
-        if new_altitude < new_zoom_back * 1.02 and v.height_backup then
-            -- Echo('returned true')
-            return true
-        end
+        -- if new_altitude < new_zoom_back * 1.02 and v.height_backup then
+        --     -- Echo('returned true')
+        --     return true
+        -- end
         -- Echo('passed')
+        if new_altitude < new_zoom_back then
+            new_zoom_back = new_altitude
+        end
         if cfg.altitude_ratio~=new_altitude_ratio then
             cfg.altitude_ratio = new_altitude_ratio 
             UpdateOption('altitude_ratio',new_altitude_ratio)
@@ -1897,7 +1977,7 @@ function widget:MouseWheel(up,value)
             cfg.min_zoom_back = new_zoom_back
             UpdateOption('min_zoom_back',new_zoom_back)
         end
-        if v.height_backup or new_zoom_back * 1.02 <= cs.relHeight then
+        if v.height_backup --[[or new_zoom_back * 1.02 <= cs.relHeight--]] then
             v.height_backup = new_zoom_back
         end
         if new_altitude~=v.altitude then
