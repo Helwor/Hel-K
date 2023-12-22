@@ -787,16 +787,20 @@ local function Compare(ac, bc)
 
 	if a.isSpec ~= b.isSpec then
 		return not a.isSpec
-	elseif a.isSpec and b.isSpec then
+	elseif a.isSpec and b.isSpec and not b.isMe then
 		if a.isWaiting~=b.isWaiting then
-			return b.isWaiting and not b.isMe
+			return b.isWaiting 
 		end
 	end
+
+
 	if a.isAiTeam ~= b.isAiTeam then
 		return not a.isAiTeam
 	elseif a.isAiTeam then
 		return a.teamID < b.teamID
 	end
+	--
+
 	if a.allyTeamID ~= b.allyTeamID then
 		return a.allyTeamID < b.allyTeamID
 	end
@@ -818,8 +822,8 @@ local function Compare(ac, bc)
 		return a.isAiTeam
 	end
 	
-	if a.elo and b.elo then
-		return a.elo > b.elo
+	if not a.isSpec and a.elo and b.elo then
+		return tonumber(a.elo) > tonumber(b.elo)
 	end
 
 	if a.teamID ~= b.teamID then
@@ -954,6 +958,7 @@ local function UpdatePlayer(playerID, info,connecting)
 	end
 
 	toSort = UpdateEntryData(controls.entryData, controls, false, false, info, connecting) or toSort
+	-- Echo('received ', info and info.name,'sort?',toSort)
 	if toSort then
 		SortEntries()
 	end
@@ -1204,7 +1209,6 @@ function widget:ReceiveUserInfo(info, simulated)
 		local name, active, spectator, teamID, allyTeamID, pingTime, cpuUsage, country, rank, customKeys = spGetPlayerInfo(playerID, true)
 		if name == info.name then
 			info.elo = customKeys.elo or info.elo
-
 		-- for k,v in pairs(info) do
 		-- 	if k~='name' then
 		-- 		Echo('=> ' .. k .. ' = ' .. tostring(v))
