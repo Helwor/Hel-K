@@ -28,6 +28,8 @@ Handling free handed placement drawing, build controls, lots of features to disc
 
 DrawTerra2.lua
 Only handling the previsualization and can be deactivated, many options
+WARN: some user have a big crash/lag when placing building, that widget is more likely the culprit and you will have to disable it
+until I find the reason...
 
 -HasViewChanged.lua (API) managing viewable units, camera specs ...
 
