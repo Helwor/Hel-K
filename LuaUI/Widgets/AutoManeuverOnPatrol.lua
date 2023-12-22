@@ -2,7 +2,7 @@
 function widget:GetInfo()
     return {
         name      = "AutoManeuverOnPatrol",
-        desc      = "Set temporary Maneuvering state on hold position units that received a manual patrol/ attack move order",
+        desc      = "Set temporary Maneuvering state on hold position units that received a manualMove patrol/ attack move order",
         author    = "Helwor",
         date      = "Oct 2023",
         license   = "GNU GPL, v2 or v3",
@@ -23,18 +23,25 @@ local spGetMyTeamID             = Spring.GetMyTeamID
 local spGiveOrderToUnit         = Spring.GiveOrderToUnit
 local spGetSelectedUnitsSorted  = Spring.GetSelectedUnitsSorted
 local spuGetUnitMoveState       = Spring.Utilities.GetUnitMoveState
+local spuGetUnitFireState       = Spring.Utilities.GetUnitFireState
 local spugetMovetype            = Spring.Utilities.getMovetype
 local spGetUnitDefID            = Spring.GetUnitDefID
 
-EXCEPTION_DEFID = {
+EXCEPTION_MOVE_DEFID = {
     [UnitDefNames['vehsupport'].id] = true,
     [UnitDefNames['amphsupport'].id] = true,
     [UnitDefNames['jumpblackhole'].id] = true,
 }
-local elligibleDefID = {}
+local canMoveDefID = {}
 for defID, def in pairs(UnitDefs) do
-    if spugetMovetype(def) and not EXCEPTION_DEFID[defID] then
-        elligibleDefID[defID] = true
+    if spugetMovetype(def) and not EXCEPTION_MOVE_DEFID[defID] then
+        canMoveDefID[defID] = true
+    end
+end
+local canFireDefID = {}
+for defID, def in pairs(UnitDefs) do
+    if def.canAttack then
+        canFireDefID[defID] = true
     end
 end
 
@@ -42,11 +49,17 @@ local CMD_REMOVE = CMD.REMOVE
 local CMD_PATROL = CMD.PATROL
 local CMD_FIGHT = CMD.FIGHT
 local CMD_MOVE_STATE = CMD.MOVE_STATE
+local CMD_FIRE_STATE = CMD.FIRE_STATE
+local CMD_MOVESTATE_MANEUVER = CMD.MOVESTATE_MANEUVER
+local CMD_FIRESTATE_FIREATWILL = CMD.FIRESTATE_FIREATWILL 
+
 
 local myTeamID = spGetMyTeamID()
 
-local modifiedState, firstTime = {}, {}
-local manual = setmetatable({}, {__mode = 'v'})
+local oriMoveState, firstTimeChangeMove = {}, {}
+local oriFireState, firstTimeChangeFire = {}, {}
+local manualMove = setmetatable({}, {__mode = 'v'})
+local manualFire = setmetatable({}, {__mode = 'v'})
 local function Sleep(bool)
     if widgetHandler.Sleep then
         return widgetHandler[bool and 'Sleep' or 'Wake'](widgetHandler,widget, {PlayerChanged = true})
@@ -67,16 +80,21 @@ options_order = {'active'}
 options = {}
 options.active = {
     name = 'Auto Maneuver On Patrol',
-    desc = "Set temporary Maneuvering state on units that received a manual patrol/attack move order",
+    desc = "Set temporary Maneuvering state and fire at will on units on Hold Position/Hold Fire that received a manual patrol/attack move order",
     type = 'bool',
     value = active,
     OnChange = function(self)
         active = self.value
         if not active then
-            for id, oriState in pairs(modifiedState) do
+            for id, oriState in pairs(oriMoveState) do
                 spGiveOrderToUnit(id, CMD_MOVE_STATE, oriState, 0)
-                modifiedState[id] = nil
-                firstTime[id] = nil
+                oriMoveState[id] = nil
+                firstTimeChangeMove[id] = nil
+            end
+            for id, oriState in pairs(oriFireState) do
+                spGiveOrderToUnit(id, CMD_FIRE_STATE, oriState, 0)
+                oriFireState[id] = nil
+                firstTimeChangeFire[id] = nil
             end
         end
         Sleep(not active)
@@ -92,23 +110,43 @@ function widget:UnitCommand(id, defID, team, cmd, params, _, _, _, _, fromLua)
         return
     end
     if cmd == CMD_MOVE_STATE and not fromLua then
-        if not elligibleDefID[defID] then
+        if not canMoveDefID[defID] then
             return
         end
-        if manual[id] then
-            manual[id] = nil
+        if manualMove[id] then
+            manualMove[id] = nil
             return
-        elseif modifiedState[id] then
-            if params[1] ~= 1 then
-                firstTime[id], modifiedState[id] = nil, nil
-                -- Echo('mod and firstTime niled')
-            elseif firstTime[id] then
-                -- Echo('firstTime niled')
-                firstTime[id] = nil
+        elseif oriMoveState[id] then
+            if params[1] ~= CMD_MOVESTATE_MANEUVER then
+                firstTimeChangeMove[id], oriMoveState[id] = nil, nil
+                -- Echo('external order received before our own, mod and firstTimeChangeMove niled')
+            elseif firstTimeChangeMove[id] then
+                -- Echo('firstTimeChangeMove niled')
+                firstTimeChangeMove[id] = nil
             else
                 -- some move state order has been given through other means, we forget about that unit 
                 -- Echo('mod niled')
-                modifiedState[id] = nil
+                oriMoveState[id] = nil
+            end
+        end
+    elseif cmd == CMD_FIRE_STATE and not fromLua then
+        if not canFireDefID[defID] then
+            return
+        end
+        if manualFire[id] then
+            manualFire[id] = nil
+            return
+        elseif oriFireState[id] then
+            if params[1] ~= CMD_FIRESTATE_FIREATWILL then
+                firstTimeChangeFire[id], oriFireState[id] = nil, nil
+                -- Echo('external order received before our own, mod and firstTimeChangeFire niled')
+            elseif firstTimeChangeFire[id] then
+                -- Echo('firstTimeChangeFire niled')
+                firstTimeChangeFire[id] = nil
+            else
+                -- some fire state order has been given through other means, we forget about that unit 
+                -- Echo('mod niled')
+                oriFireState[id] = nil
             end
         end
     end
@@ -117,69 +155,118 @@ function widget:UnitIdle(id, defID, team)
     if team ~= myTeamID then
         return
     end
-    local oriState = modifiedState[id]
+    local oriState = oriMoveState[id]
     if oriState then
-        if not firstTime[id] then 
+        if not firstTimeChangeMove[id] then 
             spGiveOrderToUnit(id, CMD_MOVE_STATE, oriState, 0)
-            modifiedState[id] = nil
+            oriMoveState[id] = nil
         end
     end
+    local oriState = oriFireState[id]
+    if oriState then
+        if not firstTimeChangeFire[id] then 
+            spGiveOrderToUnit(id, CMD_FIRE_STATE, oriState, 0)
+            oriFireState[id] = nil
+        end
+    end
+
 end
 
 function widget:UnitCommandNotify(id, cmd, params, opts)
 
     if cmd == CMD_MOVE_STATE then -- user is manually setting move state, we forget about this unit
         local defID = spGetUnitDefID(id)
-        if not elligibleDefID[defID] then
+        if not canMoveDefID[defID] then
             return
         end
-        modifiedState[id] = nil
-        firstTime[id] = nil
-        manual[id] = params
+        oriMoveState[id] = nil
+        firstTimeChangeMove[id] = nil
+        manualMove[id] = params
+    end
+    if cmd == CMD_FIRE_STATE then -- user is manually setting move state, we forget about this unit
+        local defID = spGetUnitDefID(id)
+        if not canFireDefID[defID] then
+            return
+        end
+        oriFireState[id] = nil
+        firstTimeChangeFire[id] = nil
+        manualFire[id] = params
     end
     if cmd ~= CMD_PATROL and cmd ~= CMD_FIGHT then
         return
     end
     local defID = spGetUnitDefID(id)
-    if not elligibleDefID[defID] then
-        return
-    end
-    if not (manual[id] or firstTime[id]) then
+    if canMoveDefID[defID] and not (manualMove[id] or firstTimeChangeMove[id]) then
         local moveState = spuGetUnitMoveState(id)
         if moveState == 0 then
             -- Echo('send',os.clock())
-            modifiedState[id] = moveState
-            firstTime[id] = true
-            spGiveOrderToUnit(id, CMD_MOVE_STATE, 1, 0)
+            oriMoveState[id] = moveState
+            firstTimeChangeMove[id] = true
+            spGiveOrderToUnit(id, CMD_MOVE_STATE, CMD_MOVESTATE_MANEUVER, 0)
+        end
+    end
+    if canFireDefID[defID] and not (manualFire[id] or firstTimeChangeFire[id]) then
+        local fireState = spuGetUnitFireState(id)
+        if fireState == 0 then
+            -- Echo('send',os.clock())
+            oriFireState[id] = fireState
+            firstTimeChangeFire[id] = true
+            spGiveOrderToUnit(id, CMD_FIRE_STATE, CMD_FIRESTATE_FIREATWILL, 0)
         end
     end
 end
 function widget:CommandNotify(cmd, params)
     if cmd == CMD_MOVE_STATE then -- user is manually setting move state, we forget about those units
         for defID, units in pairs(WG.selectionDefID or spGetSelectedUnitsSorted()) do
-            if elligibleDefID[defID] then
+            if canMoveDefID[defID] then
                 for i, id in ipairs(units) do
-                    manual[id] = params
-                    modifiedState[id] = nil
-                    firstTime[id] = nil
+                    manualMove[id] = params
+                    oriMoveState[id] = nil
+                    firstTimeChangeMove[id] = nil
                 end
             end
         end
-    end
-    if cmd ~= CMD_PATROL and cmd ~= CMD_FIGHT then
         return
-    end
-    for defID, units in pairs(WG.selectionDefID or spGetSelectedUnitsSorted()) do
-        if elligibleDefID[defID] then
-            for i, id in ipairs(units) do
-                if not (manual[id] or firstTime[id]) then
-                    local moveState = spuGetUnitMoveState(id)
-                    if moveState == 0 or modifiedState[id] then
-                        -- Echo('send',os.clock())
-                        -- reapply even if the moveState is 1 and has been modified, in case the patrol order arrive after UnitIdle is triggered
-                        modifiedState[id] = moveState
-                        firstTime[id] = true
-                        spGiveOrderToUnit(id, CMD_MOVE_STATE, 1, 0)
+   elseif cmd == CMD_FIRE_STATE then -- user is manually setting move state, we forget about those units
+        for defID, units in pairs(WG.selectionDefID or spGetSelectedUnitsSorted()) do
+            if canFireDefID[defID] then
+                for i, id in ipairs(units) do
+                    manualFire[id] = params
+                    oriFireState[id] = nil
+                    firstTimeChangeFire[id] = nil
+                end
+            end
+        end
+        return
+    elseif cmd == CMD_PATROL or cmd == CMD_FIGHT then
+        for defID, units in pairs(WG.selectionDefID or spGetSelectedUnitsSorted()) do
+            if canMoveDefID[defID] then
+                for i, id in ipairs(units) do
+                    if not (manualMove[id] or firstTimeChangeMove[id]) then
+                        local moveState = spuGetUnitMoveState(id)
+                        if moveState == 0 or oriMoveState[id] then
+                            -- Echo('send',os.clock())
+                            -- reapply even if the moveState is 1 and has been modified, in case the patrol order arrive after UnitIdle is triggered
+                            oriMoveState[id] = moveState
+                            firstTimeChangeMove[id] = true
+                            spGiveOrderToUnit(id, CMD_MOVE_STATE, CMD_MOVESTATE_MANEUVER, 0)
+                        end
+                    end
+                end
+            end
+            if canFireDefID[defID] then
+                for i, id in ipairs(units) do
+                    if not (manualFire[id] or firstTimeChangeFire[id]) then
+                        local fireState = spuGetUnitFireState(id)
+                        if fireState == 0 or oriFireState[id] then
+
+
+                            -- Echo('send',os.clock())
+                            -- reapply even if the moveState is 1 and has been modified, in case the patrol order arrive after UnitIdle is triggered
+                            oriFireState[id] = fireState
+                            firstTimeChangeFire[id] = true
+                            spGiveOrderToUnit(id, CMD_FIRE_STATE, CMD_FIRESTATE_FIREATWILL, 0)
+                        end
                     end
                 end
             end
@@ -187,26 +274,18 @@ function widget:CommandNotify(cmd, params)
     end
 end
 
-local switch = true
-function widget:KeyPress(key,mods,isRepeat)
-    if isRepeat then
-        return
-    end
-    -- if mods.ctrl then
-    --     switch = not switch
-    --     Echo('always draw queue set to ' .. tostring(switch))
-    --     Spring.LoadCmdColorsConfig("alwaysDrawQueue " .. (switch and '1' or '0'))
-    -- end
-end
-
 
 function widget:UnitDestroyed(id, defID, team)
     if team~=myTeamID then
         return
     end
-    if modifiedState[id] then
-        modifiedState[id] = nil
-        firstTime[id] = nil
+    if oriMoveState[id] then
+        oriMoveState[id] = nil
+        firstTimeChangeMove[id] = nil
+    end
+    if oriFireState[id] then
+        oriFireState[id] = nil
+        firstTimeChangeFire[id] = nil
     end
 end
 

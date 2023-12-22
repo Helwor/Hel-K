@@ -102,7 +102,8 @@ local function OrderDraw(str,id,color)
         table.insert(
             myDrawOrders
             ,order
-        )myDrawOrders[order] = true
+        )
+        myDrawOrders[order] = true
         orderByID[id] = order
     end
     -- table.insert(DrawUtils.screen[widget]
@@ -117,7 +118,7 @@ function widget:MyNewTeamID(id)
     knownUnits={}
 end
 local function CheckTarget(id,unit)
-    if not unit.isEnemy or unit.isRadarBleep then
+    if not unit.isEnemy or unit.isWobbling then
         return
     end
     if ignoreTargetName[unit.name] then
@@ -134,13 +135,18 @@ local function CheckTarget(id,unit)
         end
         local unitArmored = spGetUnitArmored(id)
         if unitArmored==true then
-            isArmored = 0.5
+            isArmored = 1
         elseif unitArmored==nil and structArmoredDefID[unit.defID] then
-            isArmored = 0.3
+            isArmored = 1
         end
+        -- if structArmoredDefID[unit.defID] then
+        --     Echo("unit.name, spGetUnitArmored(id) is ", unit.name, spGetUnitArmored(id), isArmored, score)
+        -- end
     elseif unit.cost and unit.cost>100 then
-        if spGetUnitIsStunned(id) or unit.name=='shieldshield' then 
+        if spGetUnitIsStunned(id) then 
             score = 2
+        elseif unit.name=='shieldshield' then 
+            score = 1
         else
             local velx,vely,velz = spGetUnitVelocity(id)
             if velx and (abs(velx)+abs(velz))<0.3 then

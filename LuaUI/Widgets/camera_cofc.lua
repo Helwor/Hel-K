@@ -863,7 +863,7 @@ local scrollSmoothMeshAllowed = Game.mapName~='RandomMapGen12x12 1.6.12 ZK'
 --------------------------------------------------------------------------------
 
 local vsx, vsy = widgetHandler:GetViewSizes()
-local cx,cy = vsx * 0.5,vsy * 0.5
+local cx,cy = vsx * 0.5,vsy * 0.5 + 1
 local centerDriftFactor = 20/1080 * vsy
 local horizAspectCorrectionFactor, vertAspectCorrectionFactor = 1, 1
 if vsx > vsy then horizAspectCorrectionFactor = vsx/vsy

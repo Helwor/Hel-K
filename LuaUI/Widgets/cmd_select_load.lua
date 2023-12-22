@@ -50,13 +50,14 @@ local CMD_ONECLICK_WEAPON       = CMD_ONECLICK_WEAPON
 
 local UseHungarian, SpiralSquare
 
-local indexedLightTrans = {}
-local indexedHeavyTrans = {}
-local transDefID 	  	= {}
-local lightTransDefID 	= {}
-local heavyDefID 		= {}
-local waitForLoad 		= {}
-local OPT_RIGHT_TABLE   = {alt=false, ctrl=false, meta=false, shift=false, right=true, internal=false, coded=CMD_OPT_RIGHT}
+local indexedLightTrans     = {}
+local indexedHeavyTrans     = {}
+local transDefID 	  	    = {}
+local lightTransDefID 	    = {}
+local heavyDefID 		    = {}
+local untransportableDefID  = {}
+local waitForLoad 		    = {}
+local OPT_RIGHT_TABLE       = {alt=false, ctrl=false, meta=false, shift=false, right=true, internal=false, coded=CMD_OPT_RIGHT}
 
 for defID, def in pairs(UnitDefs) do
 	if (def.canFly or def.cantBeTransported) then
@@ -68,6 +69,8 @@ for defID, def in pairs(UnitDefs) do
             else
                 table.insert(indexedHeavyTrans, defID)
 			end
+        else
+            untransportableDefID[defID] = true
 		end
 	else
         if def.customParams.requireheavytrans then
@@ -528,11 +531,9 @@ local function DoSelectionLoad()
                         if isLightT then
     						lT = lT + 1
     						lightTrans[lT] = unitID
-                            -- unitDefs[unitID] = defID
                         else
        						hT = hT + 1
        						heavyTrans[hT] = unitID
-                            -- unitDefs[unitID] = defID
         				end
                     end
                 end
@@ -541,13 +542,11 @@ local function DoSelectionLoad()
 			for i, unitID in ipairs(units) do
                 h = h + 1
 			    heavy[h] = unitID
-                -- unitDefs[unitID] = defID
             end
-		else
+		elseif not untransportableDefID[defID] then
             for i, unitID in ipairs(units) do
                 l = l + 1
                 light[l] = unitID
-                -- unitDefs[unitID] = defID
             end
 		end
 	end

@@ -245,6 +245,12 @@ for defID, def in pairs(UnitDefs) do
 		bomberDefID[defID] = true
 	end
 end
+local bombDefID = {}
+for defID, def in pairs(UnitDefs) do
+	if def.name:match('bomb') then
+		bombDefID[defID] = true
+	end
+end
 
 local hasBomber = false
 
@@ -1321,7 +1327,7 @@ function widget:CommandsChanged()
 	for i=1, #selectedUnits do
 		local unitID = selectedUnits[i]
 		local unitDefID = Spring.GetUnitDefID(unitID)
-		if bomberDefID[unitDefID] then
+		if bomberDefID[unitDefID] or bombDefID[defID] then
 			hasBomber = true
 		end
 		if immobileDefID[unitDefID] then

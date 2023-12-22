@@ -257,7 +257,7 @@ local myAllyTeamID      = Spring.GetMyAllyTeamID()
 
 local airpadDefID       = UnitDefNames.staticrearm.id
 local airFactoryDefID   = UnitDefNames.factoryplane.id
-local airPalteDefID     = UnitDefNames.plateplane.id
+-- local airPlateDefID     = UnitDefNames.plateplane.id
 
 local currentFrame
 
@@ -266,7 +266,7 @@ local currentFrame
 --------------------------------------------------------------------------------
 
 local bombers = {}  -- Bomber Class Objects, per bomber
-local WATCH_ID
+-- local WATCH_ID
 
 local targets = {}
 -- Targeted units. Several bombers could have the same target, so targets' data resides in this table:
@@ -280,7 +280,7 @@ local targets = {}
 -- following are own only, not allied; used as a destination to return if the target gone and there are no queued commands.
 local airpads   = {}    -- [unitID] -> {x,y,z} (position)
 local airFacs   = {}    -- [unitID] -> {x,y,z}
-local airPlates = {}    -- [unitID] -> {x,y,z}
+-- local airPlates = {}    -- [unitID] -> {x,y,z}
 local myAirpads = {}
 --------------------------------------------------------------------------------
 -- Functions
@@ -652,15 +652,18 @@ function bomberClass:New(unitID, unitDefID)
 	o.humanName     = def.humanName
 	o.name			= def.name
 	o.weaponSpeed   = def.projectileSpeed
+	o.weaponSpeedSQ = def.projectileSpeed and def.projectileSpeed^2
 	o.speed			= def.speed
 	o.attackMove    = false
 	o.unloaded		= true
 	o.pos 			= {frame = currentFrame, spGetUnitPosition(unitID)}
+	o.movePursue	= false
+	o.lastCommand	= false
 	                -- Commands added by UnitCommand, removed (restored) by RestoreQueuedCmds
 	return o
 end
 
-local done = 0
+
 function bomberClass:CancelLast()
 	local lastCommand = self.lastCommand
 
@@ -670,12 +673,13 @@ function bomberClass:CancelLast()
 		-- local current = spGetCommandQueue(self.id,1)[1]
 		-- Echo('got really that command?',current and current.params[1])
 	end
-	local cmd = movePursue and lastCommand[3] and CMD_RAW_MOVE or CMD_ATTACK
+	local cmd = self.movePursue and CMD_RAW_MOVE or CMD_ATTACK
 	spGiveOrderToUnit(self.id, cmd, not lastCommand[3] and lastCommand[1] or lastCommand, CMD_OPT_SHIFT)
-	self.lastCommand = nil
+	self.lastCommand = false
+	self.movePursue = false
 
 end
-function bomberClass:Order(p1,p2,p3)
+function bomberClass:Order(p1,p2,p3, move)
 	-- if self:CheckUnload() then
 	-- 	Debug('ordering while unloaded !')
 	-- end
@@ -690,7 +694,7 @@ function bomberClass:Order(p1,p2,p3)
 	end
 
 	-- Debug('inserting',params[1], 'unloaded ?',self:CheckUnload())
-	local cmd = p3 and movePursue and CMD_RAW_MOVE or CMD_ATTACK
+	local cmd = move and CMD_RAW_MOVE or CMD_ATTACK
 	spGiveOrderToUnit(self.id, CMD_INSERT, {0, cmd, CMD_OPT_SHIFT + CMD_OPT_INTERNAL, p1,p2,p3}, CMD_OPT_ALT)
 	-- Debug('removing',lastCommand[1])
 	if lastCommand then
@@ -698,6 +702,7 @@ function bomberClass:Order(p1,p2,p3)
 		self:CancelLast()
 	end
 	self.lastCommand = {p1,p2,p3}
+	self.movePursue = move or false
 	return true
 end
 function bomberClass:HitTargetID(targetID)
@@ -736,9 +741,11 @@ function bomberClass:HitTargetPosition(targetPos, cancelIfFar)
 		self:Order(targetPos)
 		return
 	elseif vel.speed < 1  and target.inLos then
-		Debug('current speed is low, targetting unit')
-		self:HitTargetID(targetID)
-		return
+		if self.name ~= 'bomberheavy' or not target.inWater then
+			Debug('current speed is low, targetting unit')
+			self:HitTargetID(targetID)
+			return
+		end
 	end
 	local tx,ty,tz = unpack(targetPos)
 	local dx,dy,dz = tx-x, ty-y, tz-z
@@ -753,41 +760,41 @@ function bomberClass:HitTargetPosition(targetPos, cancelIfFar)
 	local speed = vel.speed
 	-- Debug("vx,vy,vz is ", vx,vy,vz)
 	-- Debug("self.weaponSpeed, targets[self.target].vel.speed is ", self.weaponSpeed, targets[self.target].vel.speed)
-	local a = self.weaponSpeed^2 - speed^2
-	--if a < 0.01 then
+	local reachSpeedSQ = self.weaponSpeedSQ - speed^2
+	--if reachSpeedSQ < 0.01 then
 		-- should not happen as weapon speed > target speed -- yes it happens for raven targetting darts and the like
 		-- return
 	--end
-	local b = dx * vx + dy * vy + dz * vz 
-	-- local b = dx * (vx+ovx)/2 + dy * (vy+ovy)/2 + dz * (vz+ovz)/2
-	-- local b = dx + dy + dz
-	-- b = b / 2
-	local c = dx^2 + dy^2 + dz^2 -- dist3D between target pos and bomber pos
+	local direction = dx * vx + dy * vy + dz * vz 
+	-- local direction = dx * (vx+ovx)/2 + dy * (vy+ovy)/2 + dz * (vz+ovz)/2
+	-- local direction = dx + dy + dz
+	-- direction = direction / 2
+	local distSQ = dx^2 + dy^2 + dz^2 -- dist3D between target pos and bomber pos
 
 	-- Echo("ov is ", ov)
-	local d = b^2 + a * c
+	local d = direction^2 + reachSpeedSQ * distSQ
 
 	if d >= 0 then
-		local t = (b + sqrt(d)) / a
+		local t = (direction + sqrt(d)) / reachSpeedSQ
 		if t > 750 then
 			Debug('prediction too far off, capping')
 			t = 750
 		end
-		--local t2 = (b - sqrt(d)) / a
+		--local t2 = (direction - sqrt(d)) / reachSpeedSQ
 		--if t2 > 0 then Debug("T2 POSITIVE: t=", t, "t2 = ", t2) end    -- should not happen
 		-- if math.abs(t * speed) > 2000 then
 		-- 	Debug('prediction too far off, targetting unit')
 		-- 	self:HitTargetID(targetID)
 		-- 	return
 		-- end
-		-- Echo("dx,dy,dz is ", dx,dy,dz,'b',b,'d',sqrt(d))
+		-- Echo("dx,dy,dz is ", dx,dy,dz,'direction',direction,'d',sqrt(d))
 		-- Echo("vx*t, vy*t, vz*t is ", vx*t, vy*t, vz*t)
-		-- Echo("b is ", b)
+		-- Echo("direction is ", direction)
 		local aimX, aimY, aimZ =
 			tx + vx * t,
 			ty + vy * t,
 			tz + vz * t
-		-- Debug("aimX, aimY,aimZ is ", aimX, aimY,aimZ,t,a)
+		-- Debug("aimX, aimY,aimZ is ", aimX, aimY,aimZ,t,reachSpeedSQ)
 		local cAimX, cAimZ = clamp(aimX, aimZ, 16)
 		local cAimY = aimY
 		if cAimX ~= aimX or cAimZ ~= aimZ then
@@ -822,7 +829,9 @@ function bomberClass:HitTargetPosition(targetPos, cancelIfFar)
 			self:HitTargetID(targetID)
 			return
 		end	
-		self:Order(cAimX, cAimY, cAimZ)
+		-- Echo("dist_predicted is ", dist_predicted)
+		local move = movePursue and (t > 100 or not target.inLos)
+		self:Order(cAimX, cAimY, cAimZ, move)
 
 	else
 		Debug ("d is negative, targetting unit")  
@@ -836,6 +845,7 @@ function bomberClass:AddTarget(targetID)
 	end
 	self.target = targetID
 	self.lastCommand = {targetID}
+	self.movePursue = false
 	return targets:increase(targetID)
 end
 function bomberClass:RemoveTarget(cancel, Return)
@@ -845,7 +855,8 @@ function bomberClass:RemoveTarget(cancel, Return)
 	if targetID and cancel then
 		self:CancelLast()
 	else
-		self.lastCommand = nil
+		self.lastCommand = false
+		self.movePursue = false
 	end
 	if Return then
 		self:Return()
@@ -934,13 +945,17 @@ function bomberClass:UpdateState(cmd, params, shift, meta, stop) -- TODO: IMPLEM
 		if not targetID then
 
 			-- Echo('no targetID in UpdateState')
-			local removeGroundTarget =  meta and bomber.lastCommand and bomber.lastCommand[3]
-			local currentTgtID = bomber.target
-			if removeGroundTarget then -- queueing the current target
-				Debug(id .. 'remove target ground and requeuing target ID ' .. currentTgtID)
-				local cmd = movePursue and CMD_RAW_MOVE or CMD_ATTACK
-				spGiveOrderToUnit(id, CMD_INSERT,{0, cmd, CMD_OPT_SHIFT + CMD_OPT_INTERNAL, currentTgtID}, CMD_OPT_ALT)
+			local removeGroundTarget
+			if bomber.lastCommand then
+				removeGroundTarget = meta and bomber.lastCommand[3]
+				local move = bomber.movePursue
+				if removeGroundTarget then -- queueing the current target
+					Debug(id .. 'remove target ground and requeuing target ID ' .. currentTgtID)
+					local cmd = move and CMD_RAW_MOVE or CMD_ATTACK
+					spGiveOrderToUnit(id, CMD_INSERT,{0, cmd, CMD_OPT_SHIFT + CMD_OPT_INTERNAL, currentTgtID}, CMD_OPT_ALT)
+				end
 			end
+			local currentTgtID = bomber.target
 			
 			bomber:RemoveTarget(removeGroundTarget)
 			-- spGiveOrderToUnit(id, CMD_INSERT,{0, CMD_UNIT_CANCEL_TARGET, 0, 0}, CMD_OPT_ALT)
@@ -949,9 +964,9 @@ function bomberClass:UpdateState(cmd, params, shift, meta, stop) -- TODO: IMPLEM
 			if shift then -- shift is only reported from CommandNotify in some special condition, reminder: UpdateState only work on the current order
 				-- the user reclicked the same current target, we cancel the command to come if it's not a direct attack order
 				if lastCommand and lastCommand[3] then -- we are predicting position, there will be an order to attack directly the unit instead of cancelling, so we prevent that order to be achieved by repeating it
-
+					local move = bomber.movePursue
 					bomber:RemoveTarget(true) -- remove target and cancel the last ground target command
-					local cmd = movePursue and CMD_RAW_MOVE or CMD_ATTACK
+					local cmd = move and CMD_RAW_MOVE or CMD_ATTACK
 					spGiveOrderToUnit(bomber.id, cmd, targetID, CMD_OPT_INTERNAL + CMD_OPT_SHIFT)
 				else
 					bomber:RemoveTarget(false) -- just remove the target without cancelling the attack, the engine will do it by itself
@@ -962,6 +977,7 @@ function bomberClass:UpdateState(cmd, params, shift, meta, stop) -- TODO: IMPLEM
 				-- the user reclicked the same target, there will be an attack order we want to cancel if we are predicting position
 				if lastCommand and lastCommand[3] then
 					bomber.lastCommand = {targetID} -- we tell our system that the last command is attacking the unit so it will cancel it
+					bomber.movePursue = false
 					updateNow[targetID] = targets[targetID] -- for cancelling it ASAP
 				end
 			else
@@ -997,9 +1013,9 @@ function bomberClass:Return(rearm, shift)
 	local queue = spGetCommandQueue(self.id,-1)
 	for i=1, #queue do
 		local order = queue[i]
-		if order.id == CMD_RAW_MOVE then
-			Echo('raw move params', unpack(order.params))
-		end
+		-- if order.id == CMD_RAW_MOVE then
+		-- 	Echo('raw move params', unpack(order.params))
+		-- end
 		if order.id == CMD_RAW_MOVE and order.params[3] then
 			from = order.params
 		end
@@ -1251,12 +1267,12 @@ function widget:UnitFinished(unitID, unitDefID, unitTeam)
 			if unitTeam == myTeamID then
 				myAirpads[unitID] = pos
 			end
-		elseif unitDefID == airPalteDefID then -- plate don't receive landing planes?
-			local pos = {id = unitID, spGetUnitPosition(unitID)}
-			airPlates[unitID] = pos
-			if unitTeam == myTeamID then
-				myAirpads[unitID] = pos
-			end
+		-- elseif unitDefID == airPlateDefID then -- plate don't receive landing planes?
+		-- 	local pos = {id = unitID, spGetUnitPosition(unitID)}
+		-- 	airPlates[unitID] = pos
+		-- 	if unitTeam == myTeamID then
+		-- 		myAirpads[unitID] = pos
+		-- 	end
 		end
 	end
 end
@@ -1281,8 +1297,8 @@ function widget:UnitDestroyed(unitID)
 		myAirpads[unitID] = nil
 	elseif airFacs[unitID] then
 		airFacs[unitID] = nil
-	elseif airPlates[unitID] then
-		airPlates[unitID] = nil
+	-- elseif airPlates[unitID] then
+	-- 	airPlates[unitID] = nil
 	end
 end
 
@@ -1326,11 +1342,11 @@ function widget:UnitCmdDone(unitID, unitDefID, unitTeam, cmdID, cmdParams, cmdOp
 	if not cmd  then
 		if bomber.target then
 			-- Debug(bomber.id .. ' no more order in UnitCmdDone BUT BOMBER GOT TARGET!, niling lastCommand')
-			-- bomber.lastCommand = nil
-			Debug(unitID .. ' no more order in UnitCmdDone BUT BOMBER GOT TARGET! CMD done?', cmdID)
-			-- bomber:RemoveTarget()
-			-- bomber.lastCommand = nil
-			-- checkReturn[unitID] = bomber
+			-- bomber.lastCommand = false
+			-- Debug(unitID .. ' no more order in UnitCmdDone BUT BOMBER GOT TARGET! CMD done?', cmdID)
+			bomber:RemoveTarget()
+			bomber.lastCommand = false
+			checkReturn[unitID] = bomber
 		end
 		-- if bomber.target then
 		--	local targetID = bomber.target
@@ -1495,9 +1511,9 @@ function widget:UnitCommand(unitID, unitDefID, unitTeam, cmdID, cmdParams, cmdOp
 		bomber.areaAtt = nil
 		return
 	end
-	if WATCH_ID == unitID then
-		Debug('watched unit ' .. unitID .. ' receive order ', cmdID, unpack(cmdParams))
-	end
+	-- if WATCH_ID == unitID then
+	-- 	Debug('watched unit ' .. unitID .. ' receive order ', cmdID, unpack(cmdParams))
+	-- end
 	local inserting = cmdID == 1
 	local isInternal, isNow, coded
 	local paramOffset

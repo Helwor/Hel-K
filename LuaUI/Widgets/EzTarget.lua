@@ -379,7 +379,7 @@ local sel = spGetSelectedUnits()
 local mempoints = {n=0}
 
 vHas.hasAttacker, vHas.gotAirUnit, vHas.gotControllableRepairer, vHas.hasLobster, vHas.hasDgunOnAlt, vHas.hasJumper, vHas.hasPuppy = false, false, false, false, false, false, false
-
+vHas.cloaked = false
 v.lastAcquiredSelect = false
 v.mousePressed = false
 local controllableRepairers = {}
@@ -784,11 +784,16 @@ local function Evaluate(type, id, engineCmd)
     -- if Debug.EZ() and engineCmd == CMD_GUARD then
     --     return 0
     -- end
+    -- Echo("spGetUnitRulesParams('areacloaked') is ",v.defaultTarget--[[, spGetUnitRulesParams('areacloaked')--]])
     if vHas.gotControllableRepairer then  -- finally don't change the default Repair ?
-        if v.defaultCmd == CMD_REPAIR and v.moddedCmd == CMD_ATTACK then
+        if v.defaultCmd == CMD_REPAIR and (v.moddedCmd == CMD_ATTACK or vHas.cloaked) then
             -- Echo('falsified',math.round(os.clock()))
             v.moddedCmd = false
             v.moddedTarget = false
+            if not alt and vHas.cloaked then
+                v.moddedCmd = CMD_RAW_MOVE
+                return v.moddedCmd
+            end
             return v.cmdOverride
         end
     end
@@ -932,6 +937,7 @@ function widget:CommandsChanged()
     vHas.airDgun = false
     vHas.hasTransport = false
     upd.treatedFrame = false
+    vHas.cloaked = false
     v.customRadius = false
     vHas.gotControllableRepairer = false
     v.moddedTarget,v.moddedCmd,drawUnit=nil,nil,EMPTY_TABLE
@@ -1001,6 +1007,9 @@ function widget:CommandsChanged()
             local n = 0
             for i,id in ipairs(t) do
                 controllableRepairers[id] = defID
+                if not vHas.cloaked and spGetUnitRulesParam(id, 'areacloaked') == 1 then
+                    vHas.cloaked = true
+                end
                 n = n + 1
             end
             controllableRepairers.n = n

@@ -800,6 +800,9 @@ local function MakeAverageCalc(maxcount,chunk)
 end
 
 
+
+
+
 function AfterMouseRelease(mx,my,button)
     -- if button==1 and v.active then
 
@@ -1350,11 +1353,71 @@ end
 --         Echo('u',k,v)
 --     end
 -- end
+local Points = {}
+
+local function WorkAroundTraceGround()
+    -- CAN'T WORK THIS DOESNT TAKE INTO ACCOUNT THE NEW CAMERA POS
+    local mx,my = spGetMouseState()
+    local _,startPoint = spTraceScreenRay(mx,my,true,false,true,true)
+
+    if startPoint then
+        local cs = spGetCameraState()
+        local radarHeight = 10
+        local offset = {0,0,-300}
+        startPoint[2] = startPoint[2] + radarHeight
+        local csground = {}
+        CopyInto(csground, cs)
+        local wantedX, wantedZ = startPoint[1] + offset[1],startPoint[3] + offset[3]
+        local wantedY = spGetGroundHeight(wantedX, wantedZ)
+        if wantedY then
+            if cs.mode == 4 then
+                -- put the camera almost totally horizontal
+                local PI = math.pi
+                csground.rx = -0.06
+                -- csground.rx = - PI/2
+                csground.ry = - PI
+                csground.px, csground.py, csground.pz = unpack(startPoint)
+            else
+                csground.height = radarHeight
+            end
+            spSetCameraState(csground)
+            local mx, my = spWorldToScreenCoords(wantedX, wantedY, wantedZ) -- CAN'T WORK THIS DOESNT TAKE INTO ACCOUNT THE NEW CAMERA POS
+            local type,tracePos = spTraceScreenRay(mx,my,true,false,true,true)
+            local testInReal = true
+            if tracePos then
+                -- if type == 'sky' then
+                --     tracePos[1], tracePos[2], tracePos[3] = tracePos[4], tracePos[5], tracePos[6]
+                -- end
+                local tracedGround = spGetGroundHeight(tracePos[1], tracePos[3])
+                if tracedGround then
+                    Echo("mx,my is ", mx,my,'traced',tracePos[1], tracePos[2],'(ground ' .. tracedGround .. ')', tracePos[3])
+                    local green, blue, yellow, red = {0,1,0,1}, {0,0,1,1}, {1,1,0,1}, {1,0,0,1}
+                    Points[1] = {color = green, unpack(startPoint)}
+                    Points[2] = {color = blue, wantedX, wantedY, wantedZ}
+                    Points[3] = {color = yellow, tracePos[1], tracePos[2], tracePos[3]}
+                    Points[4] = {color = red, tracePos[1], tracedGround, tracePos[3]}
+                else
+                    Echo("mx,my is ", mx,my,'traced',tracePos[1], tracePos[2],'( traced ground error !)', tracePos[3])
+                end
+
+            end
+            if testInReal then
+                -- see where the mouse would go and don't put back the camera where it was
+                spWarpMouse(mx,my) -- IT JUST MOVE AT THE LOCATION OF WORLD WITHOUT TAKING INTO ACCOUNT THE NEW CAMERA
+                spSetCameraState(cs)
+                -- SetCameraTarget(cs, cs.px, cs.py, cs.pz,0)
+            else
+                spSetCameraState(cs)
+                -- SetCameraTarget(cs, cs.px, cs.py, cs.pz,0)
+            end
+        end
+    end
+end
 
 function widget:KeyPress(key, mods, isRepeat)
     if mods.alt and key == 102 then -- ALT + F
-        verif = 0
-        -- Echo('DG: ' .. DGcount)
+        -- WorkAroundTraceGround()  -- UNFORTUNATELY CANNOT WORK
+            -- Echo('DG: ' .. DGcount)
         -- Echo('DS: ' .. DScount)
         -- Echo('page: ' .. page)
     end
@@ -1903,7 +1966,39 @@ local PI = math.pi
 local HALFPI = PI/2
 local RADperDEGREE = PI/180
 local tan = math.tan
+-- for Point Debugging
+local glTranslate = gl.Translate
+local glBillboard = gl.Billboard
+local glVertex = gl.Vertex
+local glPointSize = gl.PointSize
+local glBeginEnd = gl.BeginEnd
+local white = {1,1,1,1}
+local GL_POINTS = GL.POINTS
+local pointFunc = function(x,y,z)
+    glVertex(x,y,z)
+end
 function widget:DrawWorld()
+    if Points[1] then
+        for i,p in ipairs(Points) do
+            glColor(p.color or white)
+            local x,y,z = unpack(p)
+            if gl.txt then
+                glPushMatrix()  
+                glTranslate(x,y,z)
+                glBillboard()
+                glText(
+                    type(p.txt) == 'string' and p.txt or i,
+                    -3,
+                    -3,
+                    p.size or 10
+                )
+                glPopMatrix()
+            else
+                glPointSize(p.size or 7.0)
+                glBeginEnd(GL_POINTS, pointFunc,x,y,z)
+            end
+        end
+    end
     if not v.draw then
         return
     end

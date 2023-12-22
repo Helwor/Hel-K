@@ -133,15 +133,36 @@ local IM -- Integral Menu
 
 local currentSel = {}
 local Cam
+
+local call -- the macro running
+local lastCall -- to be able to change radius of calls that are on_press // not tested/implemented yet
+
+
 local g = { -- mini global, shared variables amongst widget to avoid upvalues limit
 	ctrlGroups = {},
 	gameStarted = false,
 	SelFiltering = EMPTY_TABLE, -- Selection Hierarchy widget
 	SM_Enabled = EMPTY_TABLE,
 	SM_SwitchOn = false, -- handle of Selection Modkeys enable option to switch it when combo use left click
+	keyChanged = false,
 
 }
 
+-- local g =  setmetatable(
+-- 	{},
+-- 	{
+-- 		__newindex = function(self,k,v)
+-- 			if k == 'keyChanged' and v == true and call and call.name:match('with') then
+-- 				Echo('..........\n' .. debug.traceback())
+-- 			end
+-- 			g[k] = v
+-- 		end,
+-- 		__index = function(self,k)
+-- 			return g[k]
+-- 		end
+-- 	}
+
+-- )
 g.ctrlGroups = {
 	byKey = {}, -- store the groups per key
 	byUnitID = {},
@@ -394,8 +415,8 @@ function ctrlGroups:GetMid(grp, poses)
 end
 function ctrlGroups:GetThreshold()
 	local threshold = self.cfg.selectThreshold
-	if Cam.dist < 4000 then
-		threshold = math.max(threshold * (Cam.dist / 4000), 150)
+	if Cam.relDist < 4000 then
+		threshold = math.max(threshold * (Cam.relDist / 4000), 150)
 	end
 	return threshold
 end
@@ -1075,7 +1096,7 @@ local hotkeysCombos={
 						-- note: both operator can be mixed together, ['?!']={A,B} will means NOT A OR NOT B
 						-- subtable means (A AND B) in those cases
 						-- here we don't want units having those names
-						['!name']={'shieldshield','amphlaunch','amphsupport','tankarty','heavyarty','spidercrabe','cloakbomb','shieldbomb','jumpbomb','amphbomb','spiderscout','spiderantiheavy','striderantiheavy','striderdante','cloakheavyraid'}
+						['!name']={'vehsupport','shieldshield','amphlaunch','amphsupport','tankarty','heavyarty','spidercrabe','cloakbomb','shieldbomb','jumpbomb','amphbomb','spiderscout','spiderantiheavy','striderantiheavy','striderdante','cloakheavyraid'}
 						  
 						-- you can also OR or OR+NOT subsets(subtables of requirements), logically NOTing multiple subsets without OR doesnt make sense
 						-- for the sake of visibility and simplicity, you don't need to specify ['?']={subest1,subset2}, it will be implictly assumed
@@ -1787,7 +1808,7 @@ local hotkeysCombos={
 			}, -- use same 'previous' table as the cited macro
 
 
-			{name='Morph' -- Pick a deactivated cloaker and activate it if we didnt find activated one
+			{name='Morph' --
 			,method='on_selection'
 			,keys = {'?AIR','LCTRL','doubleTap'}
 			,defs={  }
@@ -2005,15 +2026,15 @@ local hotkeysCombos={
 			,method='all'
 			,from_cursor=true
 			,defs={'!isUnit',['!name']={'staticrearm','staticmissilesilo'},['?']={'isFactory',name='striderhub'}}
-			,prefer = {['!family'] = 'gunship'}
+			-- ,prefer = {['!family'] = 'gunship'}
 			,byType = 'family'
 			,keys={'TAB'--[[,'?doubleTap'--]],'?spam'}
 			-- ,want=1 -- can specify the number you want to select, will cycle through valid units
 			-- ,byType='defID'
-			,pref_use_prev = true
+			-- ,pref_use_prev = true
 			,selname=true -- show the unit name as title of the macro
 			,on_press=true
-			,previous_time = 0.8
+			,previous_time = 0.6
 			,hasStructure = true
 			,want=1
 			,force=true}, -- force the hotkey
@@ -2430,8 +2451,9 @@ local hotkeysCombos={
 					{family = 'veh'},
 					{family = 'hover'},
 					{family='gunship'},
+					{family = 'spider'},
 					-- {name = {'jumpblackhole'}},
-					{class = 'skirm' , ['!name'] = 'shieldfelon'},
+					{class = 'skirm' , ['!name'] = 'shieldfelon', ['!family'] = {'ship', 'veh', 'hover','gunship', 'spider'} },
 					{name = {'shieldfelon','spiderskirm','shieldskirm','jumpskirm','cloakskirm','amphfloater'}},
 					-- {name = 'shieldfelon'},
 				},
@@ -2638,7 +2660,7 @@ local hotkeysCombos={
 				-- color={0.5, 0.9, 0.5, 1},fading=1},
 			------ ARTY -------
 
-				{name='arty',
+				{name='Arty',
 				method='cylinder',
 				keys={'?SPACE',4,'doubleTap','?spam'},	
 				byType='defID',
@@ -2653,21 +2675,22 @@ local hotkeysCombos={
 				keys={'?SPACE',5},
 				byType='defID',
 				defs={['class']='arty'},
+				share_radius = 'Arty',
 				color={0.2, 0.2, 0.6, 1},fading=1},
 
-				{name='One Arty',
-				method='on_acquired',
-				keys={'?SPACE',5,'longPress','mouseStill'},
-				from_cursor = true,
-				want = 1,
-				color={0.5, 0.9, 0.5, 1},fading=1},
+				-- {name='One Arty',
+				-- method='on_acquired',
+				-- keys={'?SPACE',5,'longPress','mouseStill'},
+				-- from_cursor = true,
+				-- want = 1,
+				-- color={0.5, 0.9, 0.5, 1},fading=1},
 
-				{name='all arty',
-				method='all',
-				on_press=true, 
-				keys={'?SPACE',5,'doubleTap','?spam'},
-				defs={['class']='arty'},
-				color={0.2, 0.2, 0.6, 1},fading=1},
+				-- {name='all arty',
+				-- method='all',
+				-- on_press=true, 
+				-- keys={'?SPACE',5,'doubleTap','?spam'},
+				-- defs={['class']='arty'},
+				-- color={0.2, 0.2, 0.6, 1},fading=1},
 
 			------ AA -------
 
@@ -2724,8 +2747,6 @@ local hotkeysCombos={
 				from_cursor=true,
 				defs={['name']='cloakaa',['fireState']=0},
 				keys={'?SPACE','N_2','LClick','longClick'},
-				-- ignore_from_sel=true, -- remove from possible units those that are already selected, this to prevent priority2 to get overriden by units already selected
-				-- want=1,
 				force=true,
 				share_radius = 'Set Scout',
 				}, 
@@ -2768,7 +2789,7 @@ local hotkeysCombos={
 				call_on_only_defs = {
 					[{['name']={'bomberstrike'},['!p:noammo']={1,2}}] = 'Loaded Bomber Strike', 
 				},
-				set_active_command=-1,
+				set_active_command=-1, -- remove the reclaim active command that might have been activated
 				force=true,
 				color={0.5, 0.9, 0.5, 1},fading=0.8},
 
@@ -3295,7 +3316,7 @@ local myTeamID = spGetMyTeamID()
 g.pressTime = clock()
 
 
-g.keyChanged = false
+
 g.inTweakMode=false -- fix the release of keys provoked by tweak mode (wont get registered by KeyRelease)
 
 -- mouse implementation
@@ -3329,8 +3350,6 @@ g.radius = 650
 local memRadius={} -- radius for each macros memorized over game
 g.lagFactor =0
 
-local call -- the macro running
-local lastCall -- to be able to change radius of calls that are on_press // not tested/implemented yet
 
 
 
@@ -4006,7 +4025,7 @@ local function FinishCall(selecting)
 		g.hkCombo=jumpCall
 		g.hkCombo.secondary = last.call.secondary or last.call
 		g.keyChanged=true
-		-- Echo(last.call.name,'ON =>',g.hkCombo.name)
+		-- Echo(last.call.name,'JUMP =>',g.hkCombo.name)
 		widget:DrawGenesis(0)
 	end		
 	if call_on_fail or call_on_success then
@@ -5107,6 +5126,7 @@ do
 			last.previousDouble=doubled and doubleKey
 			--if keyset==showcombo then showComboInLog=not showComboInLog end
 			g.keyChanged=true
+
 			--Echo(" is ", spDiffTimers(spGetTimer(), g.pressTime),'lag',g.lagFactor/3)
 			--Echo(clock()-g.pressTime)
 			--------------------------
@@ -6633,7 +6653,7 @@ do
 			g.keyChanged=false
 			-- g.hotkeyAlreadyBound=false
 			if call then
-
+				-- Echo("call.name, os.clock() is ", call.name, os.clock(),'delta',delta)
 
 
 
@@ -6868,7 +6888,7 @@ do
 				if call.byType then g.validUnits.byType={} end
 				--
 				-- Echo(" is ", (1 - (1 - (GetCameraHeight(spGetCameraState()) / 2000) ) /zoom_scaling))
-				local ratio = (Cam and Cam.dist or GetCameraHeight(spGetCameraState())) / BASE_CAMERA_HEIGHT
+				local ratio = (Cam and Cam.relDist or GetCameraHeight(spGetCameraState())) / BASE_CAMERA_HEIGHT
 				-- ratio = max(ratio,1)
 				-- local ratio = (GetCameraHeight(spGetCameraState()) * 1.5 / 1000)
 				if call.share_radius then
@@ -7502,6 +7522,7 @@ end
 ----------- THIRD STEP (in almost every case) : Detect release ,end of call and select
 
 	function widget:KeyRelease(key,mods,keyset) -- key release can also be triggred by MouseRelease which in turn might be triggred by CheckClick
+		-- Echo('release',key)
 		local ret = call and true
 		local click= not KEYCODES[key] and key
 		local symbol=click or KEYCODES[key]
@@ -7561,6 +7582,7 @@ end
 		if call and newcall and (newcall==call or newcall==call.secondary) then
 			return ret
 		end
+		g.keyChanged=true
 		if call	 then
 			if call.on_delay and clock()-call.clock<call.on_delay then
 				return ret
@@ -7573,6 +7595,7 @@ end
 					-- widget:DrawGenesis(0) -- this can terminate the call in some rare occasion (panning)
 					if call then
 						-- 	call ended successfully, we can select our findings now...
+						-- Echo('call ' .. call.name .. ' ended normally')
 						FinishCall(not call.brush_order)
 					end
 				end
@@ -7581,7 +7604,6 @@ end
 			end
 
 		end	
-		g.keyChanged=true
 		return ret
 	end
 	-------------- End Of KeyRelease
@@ -7695,8 +7717,8 @@ do
 					-- test if dead unit
 					for defID, units in pairs(fullSel.defIDs) do
 						for i, id in ipairs(units) do
-							if spGetUnitIsDead(id) then
-								Echo('sorted selection contain dead unit !, Units[id]?',Units[id])
+							if spGetUnitIsDead(id) then -- never happened ??
+								Echo('sorted selection contain dead unit !',id,' Units[id]?',Units[id])
 							end
 
 						end
@@ -7813,11 +7835,12 @@ do
 					end
 					table.sort(ratios, sortHighestHalf)
 					---- debug ratios
-					for i,t in ipairs(ratios) do
-						-- Echo('sorted ratio', UnitDefs[t.defID].humanName, t.ratio)
-					end
+					-- for i,t in ipairs(ratios) do
+					-- 	Echo('sorted ratio', UnitDefs[t.defID].humanName, t.ratio)
+					-- end
 					----
 					while selected < nToSelect do
+						-- never happened
 						tries = tries + 1 ; if tries>500 then Echo('[' .. widget:GetInfo().name .. ']:ERROR infinite loop in resizing selection') break end
 						for i,t in ipairs(ratios) do
 						-- for i=#fullSel.defIDs,1,-1 do -- picking in the smallest size
@@ -7885,7 +7908,7 @@ do
 			else
 				g.radius = max(40, g.radius*(1+0.1*value))		
 			end
-			local ratio = (Cam and Cam.dist or GetCameraHeight(spGetCameraState())) / BASE_CAMERA_HEIGHT
+			local ratio = (Cam and Cam.relDist or GetCameraHeight(spGetCameraState())) / BASE_CAMERA_HEIGHT
 			-- ratio = max(ratio,1)
 			-- local ratio = (GetCameraHeight(spGetCameraState()) * 1.5 / 1000)
 			local base_radius = g.radius / (macro.fixed_radius and 1 or (0.8 + (ratio-1)/zoom_scaling))--/ (1 - (1 - (GetCameraHeight(spGetCameraState()) / 2000) ) /zoom_scaling)
