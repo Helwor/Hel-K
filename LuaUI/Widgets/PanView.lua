@@ -21,7 +21,7 @@ local wh
 include('keysym.h.lua')
 local KEYSYMS = KEYSYMS
 
-local allowWreckageInfo = false
+
 
 
 -- speedups
@@ -1790,7 +1790,7 @@ function widget:MouseRelease(mx, my, button, fake)
                     if def then
                         MakeStatsWindow(def, mx, my, unit)
                     end
-                elseif allowWreckageInfo then
+                elseif not cfg.suppress_wreckage_info then
                     local fDefID = spGetFeatureDefID(unit)
                     if fDefID then
                         local fdef = FeatureDefs[fDefID]
@@ -2110,7 +2110,7 @@ function widget:DrawWorld()
         end
     end
 
-    glLineStipple(true)
+    glLineStipple(false)
     glPopMatrix()
 end
 --
