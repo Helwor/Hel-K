@@ -822,9 +822,12 @@ local function Compare(ac, bc)
 		return a.isAiTeam
 	end
 	
-	if not a.isSpec and a.elo and b.elo then
+	if --[[not a.isSpec and--]] a.elo and b.elo then
 		return tonumber(a.elo) > tonumber(b.elo)
 	end
+	if a.rank and b.rank then
+		return tonumber(a.rank:match('%d')) > tonumber(b.rank:match('%d'))
+	end	
 
 	if a.teamID ~= b.teamID then
 		return a.teamID > b.teamID
