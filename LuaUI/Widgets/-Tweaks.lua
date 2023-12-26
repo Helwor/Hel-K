@@ -18,7 +18,7 @@ function widget:GetInfo()
     author    = "Helwor",
     date      = "august 2023",
     license   = "GNU GPL, v2 or later",
-    layer     = -math.huge, -- before the normal selection and its sound happen
+    layer     = -math.huge, 
     enabled   = true,  --  loaded by default?
     handler   = true,
     api       = true
@@ -206,7 +206,7 @@ do -- register history
 end
 
 function widget:KeyPress(key,mods, isRepeat)
-    if key == 105 and mods.alt then
+    if key == 105 and mods.alt then -- alt + i
         if AComHistory[1] then
             local len = #AComHistory
             Echo('debug Acom',FormatTime(spGetGameSeconds())) 

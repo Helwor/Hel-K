@@ -148,6 +148,7 @@ function NotifyExecute(unit,id,cmd,params,opts,tag,fromCmdDone,fromLua,realcmd,r
             local x,y,z = params[1],params[2], params[3]
             local gy = spGetGroundHeight(x,z)
             local height = abs(y-gy)
+
             local px,py,pz = spGetUnitPosition(id)
             local dirx, dirz = px-x, pz-z
             local def = UnitDefs[-nextOrder.id]

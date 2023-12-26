@@ -14,9 +14,15 @@ function widget:GetInfo()
 end
 local Echo = Spring.Echo
 
+local spGetBoxSelectionByEngine = Spring.GetBoxSelectionByEngine
+local spGetUnitNoSelect 		= Spring.GetUnitNoSelect
+local spGetUnitViewPosition 	= Spring.GetUnitViewPosition
+local spGetSpectatingState 		= Spring.GetSpectatingState
+local spGetUnitsInRectangle 	= Spring.GetUnitsInRectangle
+local spGetActiveCommand		= Spring.GetActiveCommand
+local spGetMyTeamID				= Spring.GetMyTeamID
 ----------------------------------------------------------------------------
 -------------------------Interface---------------------------------------
-
 WG.PreSelection_GetUnitUnderCursor = function (onlySelectable)
 	--return nil | unitID
 end
@@ -58,6 +64,7 @@ local holdingForSelection = false
 local thruMinimap = false
 local memo = {}
 local boxedUnitIDs
+local myTeamID = spGetMyTeamID()
 
 -- local function SafeTraceScreenRay(x, y, onlyCoords, useMinimap, includeSky, ignoreWater)
 -- 	local type, pt = Spring.TraceScreenRay(x, y, onlyCoords, useMinimap, includeSky, ignoreWater)
@@ -117,11 +124,11 @@ local PreSelection_GetUnitUnderCursor = function (onlySelectable, ignoreSelectio
 	elseif cannotSelect and not lmb then
 		cannotSelect = false
 	end
-
 	if outsideSpring or
 		onlySelectable and cannotSelect or
 		WG.drawtoolKeyPressed or
 		WG.MinimapDraggingCamera and spIsAboveMiniMap(x, y) or
+		WG.Chili and WG.Chili.Screen0.hoveredControl or
 		not ignoreSelectionBox and WG.PreSelection_IsSelectionBoxActive() then
 		return
 	end
@@ -159,17 +166,18 @@ local PreSelection_IsSelectionBoxActive = function ()
 	end
 	return false
 end
-
 local PreSelection_GetUnitsInSelectionBox = function ()
+	-- Echo('get units in sel box',math.round(os.clock()),spGetBoxSelectionByEngine())
 
 	local x, y, lmb = spGetMouseState()
 
 	if lmb and not cannotSelect and holdingForSelection then
-		local spec, fullview, fullselect = Spring.GetSpectatingState()
-		local myTeamID = Spring.GetMyTeamID()
+		local spec, fullview, fullselect = spGetSpectatingState()
 
 		if thruMinimap then
 			local posX, posY, sizeX, sizeY = Spring.GetMiniMapGeometry()
+            local alwaysSelectedID = WG.SelectionModkeys_GetUnitReleaseWouldClick and WG.SelectionModkeys_GetUnitReleaseWouldClick()
+
 			x = math_max(x, posX)
 			x = math_min(x, posX+sizeX)
 			y = math_max(y, posY)
@@ -179,8 +187,20 @@ local PreSelection_GetUnitsInSelectionBox = function ()
 			local bottom = math_min(start[3], here[3])
 			local right = math_max(start[1], here[1])
 			local top = math_max(start[3], here[3])
-			local units = Spring.GetUnitsInRectangle(left, bottom, right, top)
+			local units = spGetUnitsInRectangle(left, bottom, right, top)
 			if spec and fullselect then
+                if alwaysSelectedID then
+                    local found = false
+                    for i = 1, #units do
+                        if units[i] == alwaysSelectedID then
+                            found = true
+                            break
+                        end
+                    end
+                    if not found then
+                        units[#units + 1] = alwaysSelectedID
+                    end
+                end
 				return (WG.SelectionRank_GetFilteredSelection and WG.SelectionRank_GetFilteredSelection(units)) or units --nil if empty
 			else
 				local myUnits = {}
@@ -188,7 +208,7 @@ local PreSelection_GetUnitsInSelectionBox = function ()
 				local n = 0
 				for i = 1, #units do
 					teamID = Spring.GetUnitTeam(units[i])
-					if teamID == myTeamID and not Spring.GetUnitNoSelect(units[i]) then
+					if teamID == myTeamID and not spGetUnitNoSelect(units[i]) then
 						n = n + 1
 						myUnits[n] = units[i]
 					end
@@ -202,7 +222,10 @@ local PreSelection_GetUnitsInSelectionBox = function ()
 		else
 			local allBoxedUnits = {}
 			local units = {}
-
+            local alwaysSelectedID = WG.SelectionModkeys_GetUnitReleaseWouldClick and WG.SelectionModkeys_GetUnitReleaseWouldClick()
+            if alwaysSelectedID then
+                allBoxedUnits[#allBoxedUnits + 1] = alwaysSelectedID
+            end
 			if spec and fullselect then
 				units = Spring.GetAllUnits()
 			else
@@ -210,16 +233,18 @@ local PreSelection_GetUnitsInSelectionBox = function ()
 			end
 			local n = 0
 			for i=1, #units do
-				local uvx, uvy, uvz = Spring.GetUnitViewPosition(units[i], true)
+				local uvx, uvy, uvz = spGetUnitViewPosition(units[i], true)
 				if uvz then
 					local ux, uy, uz = spWorldToScreenCoords(uvx, uvy, uvz)
 					local hereMouseX, hereMouseY = x, y
-					if ux and not Spring.GetUnitNoSelect(units[i]) then
-						if ux >= math_min(screenStartX, hereMouseX) and ux < math_max(screenStartX, hereMouseX) and uy >= math_min(screenStartY, hereMouseY) and uy < math_max(screenStartY, hereMouseY) then
-							n = n +1
-							allBoxedUnits[n] = units[i]
-						end
-					end
+					local id = units[i]
+                    if ux and (id ~= alwaysSelectedID) and not spGetUnitNoSelect(id) then
+                        if ux >= math_min(screenStartX, hereMouseX) and ux < math_max(screenStartX, hereMouseX) and
+                                uy >= math_min(screenStartY, hereMouseY) and uy < math_max(screenStartY, hereMouseY) then
+                            n = n + 1
+                            allBoxedUnits[n] = id
+                        end
+                    end
 				end
 			end
 			if n > 0 then
@@ -235,6 +260,10 @@ local PreSelection_GetUnitsInSelectionBox = function ()
 end
 
 local PreSelection_IsUnitInSelectionBox = function (unitID)
+    local activeControl = WG.Chili and WG.Chili.Screen0.activeControl
+    if activeControl then
+        return
+    end
 	if not boxedUnitIDs then
 		boxedUnitIDs = {}
 		local boxedUnits = WG.PreSelection_GetUnitsInSelectionBox()
@@ -243,6 +272,9 @@ local PreSelection_IsUnitInSelectionBox = function (unitID)
 				boxedUnitIDs[boxedUnits[i]] = true
 			end
 		end
+	end
+	if WG.SelectionModkeys_GetUnitReleaseWouldClick and (unitID == WG.SelectionModkeys_GetUnitReleaseWouldClick()) then
+		return true
 	end
 	return boxedUnitIDs[unitID] or false
 end
@@ -261,23 +293,15 @@ end
 function widget:MousePress(x, y, button)
 	screenStartX = x
 	screenStartY = y
-	if button == 1 then
-		holdingForSelection = Spring.GetBoxSelectionByEngine()
-		if holdingForSelection then
-			local _
-			_, start = SafeTraceScreenRay(x, y, true, thruMinimap)
-		end
-		-- holdingForSelection = false
-		-- if Spring.GetActiveCommand() == 0 then
-		-- 	thruMinimap = not WG.MinimapDraggingCamera and spIsAboveMiniMap(x, y)
-		-- 	local _
-
-		-- 	if not WG.Chili.Screen0:IsAbove(x,y) then
-		-- 		_, start = SafeTraceScreenRay(x, y, true, thruMinimap)
-		-- 		holdingForSelection = true
-		-- 	end
-		-- end
+	if (button == 1) and spGetActiveCommand() == 0 then
+		thruMinimap = not WG.MinimapDraggingCamera and spIsAboveMiniMap(x, y)
+		local _
+		_, start = SafeTraceScreenRay(x, y, true, thruMinimap)
+		holdingForSelection = true
 	end
+end
+function widget:PlayerChanged()
+	myTeamID = spGetMyTeamID()
 end
 
 function widget:Initialize() -- work around to effectively get the functions working in the same environment as the working widget
@@ -288,4 +312,5 @@ function widget:Initialize() -- work around to effectively get the functions wor
 	WG.PreSelection_IsSelectionBoxActive = PreSelection_IsSelectionBoxActive
 	WG.PreSelection_GetUnitsInSelectionBox = PreSelection_GetUnitsInSelectionBox
 	WG.PreSelection_IsUnitInSelectionBox = PreSelection_IsUnitInSelectionBox
+	widget:PlayerChanged()
 end

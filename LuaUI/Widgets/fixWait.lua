@@ -13,7 +13,7 @@ end
 
 local Echo = Spring.Echo
 
-local spGetSelectedUnits 		= Spring.SelectedUnits
+local spGetSelectedUnits 		= Spring.GetSelectedUnits
 local spGiveOrderToUnit			= Spring.GiveOrderToUnit
 local spGetUnitCurrentCommand 	= Spring.GetUnitCurrentCommand
 local CMD_WAIT 					= CMD.WAIT

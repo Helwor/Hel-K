@@ -134,7 +134,13 @@ for k,v in pairs(bomberDefID) do
     subjectDefID[k] = v
 end
 for id,def in pairs(UnitDefs) do
-    if def.name:match('arty') or def.name=='cloaksnipe' or def.name=='gunshipemp' or def.name=='gunshipraid' or def.name == 'spiderantiheavy' then
+    local name = def.name
+    if name:match('arty')
+        or name=='cloaksnipe'
+        or name=='gunshipemp'
+        or name=='gunshipraid'
+        or name == 'spiderantiheavy'
+        or name == 'cloakheavyraid' then
         subjectDefID[id] = true
     end
 end
@@ -185,7 +191,7 @@ local active, nextTarget, nextTargetOnPressed, processed
 
 local CF2, CF2_TakeOver,lastx,lasty, lastclock, memcom, acom, memcomname, blockCN
 local cmd
-local acceptableCmd={[CMD_RAW_MOVE]=true,[CMD_ATTACK]=true,[CMD_UNIT_SET_TARGET]=true}
+local acceptableCmd={--[[[CMD_RAW_MOVE]=true,--]][CMD_ATTACK]=true,[CMD_UNIT_SET_TARGET]=true}
 
 
 local time = 0

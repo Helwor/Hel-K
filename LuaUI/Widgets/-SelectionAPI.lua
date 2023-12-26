@@ -56,13 +56,17 @@ local CMD_LOAD_UNITS = CMD.LOAD_UNITS
 -- f.DebugWidget(widget)
 local alt
 local EMPTY_TABLE = {}
+local BASE_SELINFO_KEYS = {
 
+}
 local wh
 WG.commandMap           = WG.commandMap or {}
 WG.selectionMap         = WG.selectionMap or {}
 WG.selectionDefID       = WG.selectionDefID or {}
 WG.selection            = WG.selection or {}
 WG.mySelection          = WG.mySelection or {}
+WG.transportedUnit      = WG.transportedUnit or {}
+
 local currentCommands   = {}
 local commandMap        = WG.commandMap
 local selection         = WG.selection
@@ -88,19 +92,17 @@ local heavyTransportDefID = UnitDefNames['gunshipheavytrans'].id
 
 
 local function UpdateTransport()
-    clear(transportedUnits)
-    mySelection.hasTransport = true
 
     local hasTransport, isTransporting, canLoadLight, canLoadHeavy = false, false,false
     if commandMap['Unload units'] then
         local light = selectionDefID[transportDefID]
 
         if light then
+            hasTransport = true
             for i, id in ipairs(light) do
                 local tid = spGetUnitIsTransporting(id)[1]
                 if tid then
                     isTransporting = true
-                    transportedUnits[tid] = spGetUnitDefID(tid)
                     -- if canLoadLight then
                     --     break
                     -- end
@@ -111,11 +113,11 @@ local function UpdateTransport()
         end
         local heavy = selectionDefID[heavyTransportDefID]
         if heavy then
+            hasTransport = true
             for i, id in ipairs(heavy) do
                 local tid = spGetUnitIsTransporting(id)[1]
                 if tid then
                     isTransporting = true
-                    transportedUnits[tid] = spGetUnitDefID(tid)
                     -- if canLoadHeavy then
                     --     break
                     -- end
@@ -172,7 +174,7 @@ function widget:CommandsChanged()
     clear(selectionMap)
     clear(selectionDefID)
     clear(selection)
-    clear(transportedUnits)
+    clear(mySelection)
     -- Echo('--')
 
     local totalCount = 0
@@ -193,20 +195,29 @@ function widget:CommandsChanged()
 
 
 end
+function widget:UnitDestroyed(unitID)
+    if transportedUnits[unitID] then
+        UpdateTransport()
+        transportedUnits[unitID] = nil
+    end
+end
+
+function widget:UnitLoaded(unitID, unitDefID, unitTeam, transportID, transportTeam)
+    if selectionMap[transportID] then
+        -- RemapCommands()
+        UpdateTransport()
+        transportedUnits[unitID] = unitDefID
+    end
+end
 
 
--- function widget:UnitLoaded(unitID, unitDefID, unitTeam, transportID, transportTeam)
---     if selectionMap[transportID] then
---         RemapCommands()
---     end
--- end
-
-
--- function widget:UnitUnloaded(unitID, unitDefID, unitTeam, transportID, transportTeam)
---     if selectionMap[transportID] then
---         RemapCommands()
---     end
--- end
+function widget:UnitUnloaded(unitID, unitDefID, unitTeam, transportID, transportTeam)
+    if selectionMap[transportID] then
+        -- RemapCommands()
+        UpdateTransport()
+        transportedUnits[unitID] = nil
+    end
+end
 function widget:Initialize()
     if Spring.GetSpectatingState() then
         widgetHandler:RemoveWidget(widget)

@@ -113,9 +113,11 @@ local Cam
 local MouseState
 
 local TARGET_TABLE = {}
-local commandMap, mySelection -- from 'Selection API'
+local commandMap, mySelection, selection, selectionMap -- from 'Selection API'
+local cacheCloakedRepairSuppress = {time = 0, value = false}
 local tables -- tables iterator
-local v,vHas,s, cf2 = {}, {}, {}, {}
+local v,selContext,s, cf2 = {}, {}, {}, {}
+local context = {}
 shared.v = v
 v.acquiredTarget = false
 local wh
@@ -167,7 +169,7 @@ local Debug = { -- default values
 --     ,CF2 =              {'ctrl','alt','F'}  
 --     ,debugVar =         {'ctrl','alt','V'}  
 -- }
-debugVars = {'V',v,'has',vHas,'S',s, 'CF2', cf2}
+debugVars = {'V',v,'has',selContext,'S',s, 'CF2', cf2}
 -------------
 
 local lobsterDefID = UnitDefNames['amphlaunch'].id
@@ -279,7 +281,7 @@ local terraUnitDefID = UnitDefNames['terraunit'].id
 
 
 local yellow = unpack({f.COLORS.yellow}) -- color that is used on the fly during evaluation
-
+local pink = {1,0.7,1,1}
 
 local enemies, mines, allied = {}, {}, {}
 local minesByDist = {}
@@ -292,31 +294,245 @@ toleranceTime = 0.3
 --
 
 -- CONFIG -- 
-local EZTARGET_RADIUS = 18 -- how far in pixel should we look around the cursor
+
 local EZTARGET_THRESHOLD = 25 -- if the above radius translated in elmos is smaller, EzTarget is deactivated
 local MIN_SEARCH_RADIUS = 50 -- minimum radius in elmos where to search for units
 local SPOT_RADIUS = 3
 local opt = {
 
-    ezTarget = true
-    ,targetHelper = true -- help to target when click land to ground
-    ,ezSelect = true -- same as ezTarget but for selecting unit
-    ,mouse_leeway = 25 -- threshold in pixel until we consider this is not a selection box but a single select
-    ,target_mouse_leeway = 10
+    ezTarget = true,
+
+    ezTargetRadius = 18,
+
+
+
+    targetHelper = true, -- help to target when click land to ground
+    ezSelect = true, -- same as ezTarget but for selecting unit
+    mouse_leeway = 25, -- threshold in pixel until we consider this is not a selection box but a single select
+    target_mouse_leeway = 10,
     -- use EzTarget even when not holding alt
-    ,alwaysEZ = true
+    alwaysEZ = true,
     -- draw the possible target -- but that make extra work every Update round
-    ,drawEz = true
+    drawEz = true,
     -- since EzTarget produce an attack v.cmd around enemy units by quite a margin, it can be preferable to force a move v.cmd when user right click and drag
     -- and cancel effectively Eztarget for the time
     -- this of course can only work if custom formations 2 is enabled
-    ,cancelWhenDrag = true
+    cancelWhenDrag = true,
     -- if we also want to provoke a move trail with cf2.CF2 when right click and dragging on enemy that is directly pointed by the mouse without the help of EzTarget
-    ,cancelWhenDragOnDefault = true
+    cancelWhenDragOnDefault = true,
     -- set move to edge of map when right clicked out
-    ,clampToWorld = true
+    clampToWorld = true,
+
+
+    findPad = true,
+    suppressRepairCloaked = true,
+    findStaticRepair = true,
+
+    findBuilderToGuard = true,
+    findUnitToGuard = true,
+
+
+    selSwitchStatic = true,
+
+    forceJump = true,
+    forceDGUN = true,
+    forceExclude = true,
+    forceAttack = true,
+}
+
+
+options_path = 'Hel-K/' .. widget:GetInfo().name
+options_order = {
+    'descHeader',
+    'desc1',
+    'desc2',
+
+    'ezTargetRadius',
+
+    'lbl_rclick',
+    'findPad',
+    'suppressRepairCloaked',
+    'findStaticRepair',
+
+    'lbl_alt_rclick',
+    'findBuilderToGuard',
+    'findUnitToGuard',
+
+    'lbl_sel',
+    'selSwitchStatic',
+
+    'lbl_alt',
+    'forceJump',
+    'forceDGUN',
+    'forceExclude',
+    'forceAttack',
+
+
+
 
 }
+options = {}
+
+options.descHeader = {
+    name = 'Description',
+    type = 'label',
+}
+
+options.desc1 = {
+    name = '    Help the user point selecting and',
+    type = 'label',
+}
+options.desc2 = {
+    name = '    targetting.',
+    type = 'label',
+}
+
+
+options.ezTargetRadius = {
+    name = 'Helper Radius',
+    desc = 'In pixel distance from the cursor, some custom radius per unit type can be defined in the widget, as number or as a % string',
+    value = opt.ezTargetRadius,
+    type = 'number',
+    min = 1, max = 50, step = 1,
+    OnChange = function(self)
+        opt[self.key] = self.value
+    end,
+}
+
+
+options.lbl_rclick = {
+    name = 'Right Click behaviour (without alt)',
+    type = 'label',
+}
+
+options.findPad = {
+    name = 'Find Pad to rearm',
+    desc = 'this would override other right click behaviour',
+    type = 'bool',
+    value = opt.findPad,
+    noHotkey = true,
+    OnChange = function(self)
+        opt[self.key] = self.value
+    end,
+}
+
+options.suppressRepairCloaked = {
+    name = 'No repair for con in area cloak',
+    type = 'bool',
+    value = opt.suppressRepairCloaked,
+    desc = 'Unless Alt is held, con cloaked in cloak shield will move instead of repairing',
+    noHotkey = true,
+    OnChange = function(self)
+        opt[self.key] = self.value
+        widget:CommandsChanged()
+    end,
+}
+options.findStaticRepair = {
+    name = 'Find static building to repair',
+    type = 'bool',
+    value = opt.findStaticRepair,
+    noHotkey = true,
+    OnChange = function(self)
+        opt[self.key] = self.value
+    end,
+}
+
+
+
+options.lbl_alt_rclick = {
+    name = 'Right Click behaviour (with alt)',
+    type = 'label',
+}
+
+
+options.findBuilderToGuard = {
+    name = 'Find another builder to guard',
+    desc = 'if ALT is held and a con is selected, will help find another builder to guard',
+    type = 'bool',
+    value = opt.findBuilderToGuard,
+    noHotkey = true,
+    OnChange = function(self)
+        opt[self.key] = self.value
+    end,
+}
+options.findUnitToGuard = {
+    name = 'Find unit to guard',
+    desc = 'if ALT is held, will help find another unit to guard',
+    type = 'bool',
+    value = opt.findUnitToGuard,
+    noHotkey = true,
+    OnChange = function(self)
+        opt[self.key] = self.value
+    end,
+}
+
+
+
+options.lbl_sel = {
+    name = 'Point Selection Behaviour',
+    type = 'label',
+}
+options.selSwitchStatic = {
+    name = 'Alternate static building/unit',
+    type = 'bool',
+    value = opt.selSwitchStatic,
+    desc = 'Unless Alt is held, left clicking on same target will alternatively select closest building/ closest unit',
+    noHotkey = true,
+    OnChange = function(self)
+        opt[self.key] = self.value
+    end,
+}
+
+options.lbl_alt = {
+    name = 'ALT + Right Click Override',
+    desc = 'order of following options respect the predominance of each one',
+    type = 'label',
+}
+
+options.forceJump = {
+    name = 'Jump',
+    type = 'bool',
+    value = opt.forceJump,
+    desc = 'Jump override any other behaviour as it can be meant to escape rapidly.',
+    noHotkey = true,
+    OnChange = function(self)
+        opt[self.key] = self.value
+    end,
+}
+
+options.forceDGUN = {
+    name = 'DGUN',
+    type = 'bool',
+    value = opt.forceDGUN,
+    desc = 'use DGUN with alt if no alt override',
+    noHotkey = true,
+    OnChange = function(self)
+        opt[self.key] = self.value
+    end,
+}
+options.forceAttack = {
+    name = 'Attack with puppy',
+    type = 'bool',
+    value = opt.forceAttack,
+    desc = 'Puppy can make a pseudo damaging jump by attacking',
+    noHotkey = true,
+    OnChange = function(self)
+        opt[self.key] = self.value
+    end,
+}
+
+options.forceExclude = {
+    name = 'Exclude Pad',
+    type = 'bool',
+    value = opt.forceExclude,
+    desc = 'trigger exclude pad command',
+    noHotkey = true,
+    OnChange = function(self)
+        opt[self.key] = self.value
+    end,
+}
+
+
 -- function widget:UnitCmdDone(id,defid,cmd,_,params)
 --     Echo('cmd done',cmd, params[1])
 -- end
@@ -341,7 +557,7 @@ NO_HELPER_TARGET = {
 
 }
 -- custom radius to find target
-CUSTOM_RADIUS = {
+CUSTOM_RADIUS = { -- can be expressed in number or in % as string
     [UnitDefNames['cloakraid'].id]=7,
     [UnitDefNames['vehraid'].id]=7,
     -- [UnitDefNames['bomberheavy'].id]=7,
@@ -378,11 +594,13 @@ local mods = (
 local sel = spGetSelectedUnits()
 local mempoints = {n=0}
 
-vHas.hasAttacker, vHas.gotAirUnit, vHas.gotControllableRepairer, vHas.hasLobster, vHas.hasDgunOnAlt, vHas.hasJumper, vHas.hasPuppy = false, false, false, false, false, false, false
-vHas.cloaked = false
+selContext.hasValidAttacker, selContext.hasAirAttackerUnit, selContext.hasControllableRepairer = false, false, false
+selContext.lobsters, selContext.hasDgunOnAlt, selContext.hasJumper, selContext.hasPuppy = false, false, false, false
+selContext.hasTransport = false
+
 v.lastAcquiredSelect = false
 v.mousePressed = false
-local controllableRepairers = {}
+local controllableRepairersMap = {}
 local jumpers = {}
 
 cf2.CF2, cf2.CF2_TakeOver,cf2.lastx,cf2.lasty, cf2.lastclock = false, false, false, false, false
@@ -438,12 +656,33 @@ function widget:GameFrame(f)
     upd.frame = f
 end
 
+local function SwitchCommand(commandName, command, namecom)
+    v.moddedActiveCommand = commandName
+    -- Echo("namecom, v.moddedActiveCommand is ", namecom, v.moddedActiveCommand)
+    if namecom ~= v.moddedActiveCommand then
+        spSetActiveCommand(commandName:gsub(' ',''))
+    end
 
+    v.moddedCmd = command
+end
+local function SetColor(id,color)
+    if not drawCircle[id] then
+        -- local _,_,_,x,y,z = spGetUnitPosition(v.moddedTarget,true)
+        local pos = poses[id]
+        if not pos then
+            return
+        end
+        drawCircle[id] = {pos[1], pos[2],0,SPOT_RADIUS,color,1,false,true,true,true}
 
+    else
+        drawCircle[id][5] = color
+        drawCircle[id][6] = 1
+    end
+end
 local function Evaluate(type, id, engineCmd)
 
 
-    -- if not vHas.hasAttacker then
+    -- if not selContext.hasValidAttacker then
     --     return v.cmdOverride
     -- end
     -- Echo("v.cmdOverride is ", v.cmdOverride)
@@ -469,12 +708,12 @@ local function Evaluate(type, id, engineCmd)
     if v.cmdOverride then
         return v.cmdOverride
     end
-    if WG.drawingPlacement then
+    if WG.drawingPlacement or WG.EzSelecting or WG.panning then
         reset()
         upd.updating = false
         -- v.moddedActiveCommand = false
 
-        return
+        return 
     end
 
     local mx,my,lmb,mmb,rmb, outsideSpring = spGetMouseState()
@@ -536,7 +775,7 @@ local function Evaluate(type, id, engineCmd)
         return v.cmdOverride
     end
     if alt and rmb then
-        if v.moddedCmd == CMD_MANUALFIRE and not vHas.hasLobster and wh.mouseOwner and wh.mouseOwner:GetInfo().name == 'CustomFormations2' then
+        if v.moddedCmd == CMD_MANUALFIRE and not selContext.lobsters and wh.mouseOwner and wh.mouseOwner:GetInfo().name == 'CustomFormations2' then
             -- continue working for CF2 -- TODO: make CF2 ask for it
             v.moddedTarget =  EzTarget(true)
         end
@@ -551,7 +790,7 @@ local function Evaluate(type, id, engineCmd)
     end        
 
     local debugging = Debug.EZ()
-    local wantTarget = engineCmd~=buildMexDefID and (vHas.hasAttacker or vHas.hasTransport) and ((opt.ezTarget and not ctrl) or debugging)
+    local wantTarget = engineCmd~=buildMexDefID and (selContext.hasValidAttacker or selContext.hasTransport) and ((opt.ezTarget and not ctrl) or debugging)
 
     -- if s.acquiredSelect or v.acquiredTarget then
     --     return
@@ -568,21 +807,23 @@ local function Evaluate(type, id, engineCmd)
     --     defID = spGetUnitDefID(id)
     --     f.Page(UnitDefs[spGetUnitDefID(id)])
     -- end
-    local traced, tracedDefID,  isAllied
+    local traced, tracedDefID,  isAllied, isMine
+    local onSelf
     if type=='unit' then
         local unit = Units[id]
         if unit then
             traced = id
+            onSelf = unit.isMine and traced == sel[1] and not sel[2] 
             -- local defID = spGetUnitDefID(id)
             local defID = unit.defID
             tracedDefID = defID
             -- local isAllied = unit.isAllied
             isAllied = unit.isAllied
-            if wantTarget and not ctrl and (not isAllied) and not ignoreTargetDefID[defID] then
+            isMine = unit.isMine
+            if wantTarget and not ctrl and (not isAllied) and not (defID and ignoreTargetDefID[defID]) then
                  v.defaultTarget = id
             end
-
-            if wantSelect and not ignoreSelectDefID[defID] and spGetUnitTeam(id) == v.myTeamID and not spGetUnitTransporter(id) then
+            if wantSelect and not (defID and ignoreSelectDefID[defID]) and unit.isMine and not spGetUnitTransporter(id) then
                 s.defaultSelect = id
             end
         else
@@ -604,7 +845,7 @@ local function Evaluate(type, id, engineCmd)
     -- else
     --     -- Echo('continue')
     -- end
-    v.moddedTarget, s.moddedSelect =  EzTarget(wantTarget and not v.noHelperTarget, wantSelect, vHas.gotAirUnit)
+    v.moddedTarget, s.moddedSelect =  EzTarget(wantTarget and not v.noHelperTarget, wantSelect, selContext.hasAirAttackerUnit)
     local modSelDefID
     if s.moddedSelect then
         modSelDefID = mines[s.moddedSelect]
@@ -616,156 +857,279 @@ local function Evaluate(type, id, engineCmd)
     
     -- looking for pad under flying own unit if needed
 
-    local adjustingTarget, adjustingAltTarget, adjustingSelection
 
-    local padFound, padAround
-    if vHas.gotAirUnit then
-        if not v.moddedTarget and defaultCMD~=CMD_REARM then
-            -- if we got an air unit that can land and there is a airpad-like type around the cursor which is not the closest and no ezTarget to attack then, 
-            if s.moddedSelect and s.moddedSelect ~= s.defaultSelect then
-                if airpadDefID[modSelDefID] then
-                    padFound = s.moddedSelect
-                    padAround = padFound
-                end
-            end
-            if not padFound then
-                for i,id in ipairs(minesByDist) do
-                    local defID = mines[id]
-                    if airpadDefID[defID] then
-                        -- got a pad around the cursor that is not the closest but we take it anyway
-                        padFound = id
-                        padAround = id
-                        break
+    local padToRearm, padToExclude
+    if selContext.hasAirAttackerUnit then
+        if not alt and opt.findPad or alt and opt.forceExclude then
+            local pad = false
+            if not v.moddedTarget and defaultCMD~=CMD_REARM then
+                -- if we got an air unit that can land and there is a airpad-like type around the cursor which is not the closest and no ezTarget to attack then, 
+                if s.moddedSelect and s.moddedSelect ~= s.defaultSelect then
+                    if airpadDefID[modSelDefID] then
+                        pad = s.moddedSelect
                     end
                 end
-            end
-            if not padFound then
-                for id, defID in pairs(allied) do
-                    if airpadDefID[defID] then
-                        -- got a pad around the cursor that is not the closest but we take it anyway
-                        padFound = id
-                        padAround = id
-                        break
+                if not pad then
+                    for i,id in ipairs(minesByDist) do
+                        local defID = mines[id]
+                        if airpadDefID[defID] then
+                            -- got a pad around the cursor that is not the closest but we take it anyway
+                            pad = id
+                            break
+                        end
                     end
                 end
-            end
-            if padFound then
-                v.moddedTarget = padFound
+                if not pad then
+                    for id, defID in pairs(allied) do
+                        if airpadDefID[defID] then
+                            -- got a pad around the cursor that is not the closest but we take it anyway
+                            pad = id
+                            break
+                        end
+                    end
+                end
+
+                if pad then
+                    if not alt then
+                        v.moddedTarget = pad
+                        padToRearm = pad
+                    else
+                        padToExclude = pad
+                    end
+                end
             end
         end
     end
+
+
+
+
+
 
     -- if we got a unit that can repair, and a //static// building unfinished around, and no target to attack, we target the //static// building
     -- when holding alt, point to the nearest builder with another builder and activate the guard command
     -- when not holding alt, point to the nearest unfinished static build and activate the repair command
     local buildToFinish,builderToGuard = false,false
-    if vHas.gotControllableRepairer then
-        local singleSel = not sel[2] and sel[1]
-        if alt then
-            for i, id in ipairs(minesByDist) do
-                local defID = mines[id]
-                if factoryDefID[defID] or controllableRepairerDefID[defID] then
-                    local onSelf = singleSel == id
-                    if not onSelf then
-                        builderToGuard = id
+    local unitToGuard = false
+
+
+
+    ----- managing behaviours with alt that require active command
+
+
+    if alt then
+        if selContext.hasJumper then
+            local fromBuilderToBuilder
+            -- if selContext.hasControllableRepairer then
+            --     if factoryAround then
+            --         fromBuilderToBuilder = true
+            --     else
+            --         local selDefID = s.defaultSelect and tracedDefID
+            --         if selDefID and controllableRepairerDefID[selDefID] then
+            --             fromBuilderToBuilder = true
+            --         end
+            --     end
+
+            -- end
+
+            if opt.forceJump and (not fromBuilderToBuilder or onSelf) then
+                if shift or CanJumpNow(jumpers) then
+                    SwitchCommand('Jump', CMD_JUMP, namecom)
+                    return --[[v.cmdOverride or--]] v.moddedCmd
+                end
+            end
+        end
+        if selContext.hasDgunOnAlt and opt.forceDGUN then
+            local airDgun = selContext.hasAirDgun
+            local commandName = (airDgun and 'Air ' or '') .. 'Manual' .. (airDgun and ' ' or '') .. 'Fire'
+            if v.hasLobster then
+                v.moddedTarget = false
+            elseif not v.moddedTarget and v.defaultTarget and not (isMine or isAllied) then
+                v.moddedTarget = v.moddedTarget or v.defaultTarget
+            else
+                v.moddedTarget = false
+            end
+            SwitchCommand(commandName, airDgun and CMD_AIR_MANUALFIRE or CMD_MANUALFIRE, namecom)
+            return --[[v.cmdOverride or--]] v.moddedCmd
+        elseif canTransport and canUnload and (engineCmd ~= CMD_LOAD_UNITS and (not v.moddedCmd or v.moddedCmd == CMD_RAW_MOVE or v.moddedCmd == CMD_ATTACK)) then -- giving the name of the command doesn't work for UNLOAD_UNITS
+            SwitchCommand('Unload units', CMD_UNLOAD_UNITS, namecom)
+            return v.moddedCmd
+        elseif selContext.hasPuppy and opt.forceAttack then
+            v.moddedActiveCommand = 'Attack'
+            SwitchCommand('Attack', CMD_ATTACK, namecom)
+            return v.moddedCmd
+        elseif selContext.hasAirAttackerUnit and opt.forceExclude then
+            if not padToExclude and engineCmd == CMD_REARM then
+                padToExclude = s.defaultSelect or isAllied and airpadDefID[tracedDefID] and traced
+                -- if v.moddedTarget then
+                --     v.moddedTarget = false -- in case there is an ez targetted enemy close by
+                -- end
+                -- v.moddedTarget = padToExclude
+            elseif v.moddedTarget then -- we override the modded target to our pad if any
+                for id, defID in pairs(mines) do
+                    if airpadDefID[defID] then
+                        -- got a pad around the cursor that is not the closest but we take it anyway
+                        padToExclude = id
                         break
                     end
                 end
-            end
-            if builderToGuard then
-                v.moddedTarget = builderToGuard
-                if not drawCircle[v.moddedTarget] then
-                    -- local _,_,_,x,y,z = spGetUnitPosition(v.moddedTarget,true)
-                    local sx,sy = unpack(poses[v.moddedTarget])
-                    drawCircle[v.moddedTarget] = {sx,sy,0,SPOT_RADIUS,{1,1,0,1},1,false,true,v.moddedTarget,true}
 
-                else
-                    drawCircle[v.moddedTarget][5] = yellow
-                    drawCircle[v.moddedTarget][6] = 1
-                end
             end
-        else
-            if not padFound and not v.moddedTarget --[[and v.defaultCmd~=CMD_REPAIR--]] then -- finally also make it on default repair, so it doesnt drag a circle when pointing on the unit
-                -- find a build to finish if any
-                for i,id in pairs(minesByDist) do
-                    if not controllableRepairers[id] or controllableRepairers.n>1 then
-                        local hp,maxhp,_,_,bp = spGetUnitHealth(id)
-                        if bp < 1 then
-                        -- if select(5,spGetUnitHealth(id))<1 then
-                            buildToFinish = id
+
+            if padToExclude then
+                SetColor(padToExclude, yellow)
+                SwitchCommand('Exclude', CMD_EXCLUDE_PAD, namecom)
+                return v.moddedCmd
+            end
+        end
+    end
+    -- if a moded active command has been set, the function returned
+    if v.moddedActiveCommand then
+        v.moddedActiveCommand = false
+        spSetActiveCommand(0)
+    end
+
+    ----- managing behaviours with alt that doesnt require active command
+
+    if alt then
+        if selContext.hasControllableRepairer then
+            if opt.findBuilderToGuard then
+                for i, id in ipairs(minesByDist) do
+                    local defID = mines[id]
+                    if factoryDefID[defID] or controllableRepairerDefID[defID] then
+                        if not onSelf then
+                            builderToGuard = id
                             break
-                        elseif not buildToFinish and (not singleSel or singleSel~=id) and hp<maxhp then
-                            buildToFinish = id
                         end
                     end
                 end
-                if buildToFinish then
-                    v.moddedTarget = buildToFinish
-                    if not drawCircle[v.moddedTarget] then
-                        -- local _,_,_,x,y,z = spGetUnitPosition(v.moddedTarget,true)
-                        local sx,sy = unpack(poses[v.moddedTarget])
-                        drawCircle[v.moddedTarget] = {sx,sy,0,SPOT_RADIUS,yellow,1,false,true,v.moddedTarget,true}
+                if builderToGuard then
+                    v.moddedTarget = builderToGuard
+                    SetColor(builderToGuard, yellow)
+                end
+            end
+        end
+        if not builderToGuard and opt.findUnitToGuard then
+            unitToGuard = minesByDist[1]
+            if unitToGuard then
+                v.moddedTarget = unitToGuard
+                SetColor(unitToGuard, yellow)
+            end
+        end
 
-                    else
-                        drawCircle[v.moddedTarget][5] = yellow
-                        drawCircle[v.moddedTarget][6] = 1
+
+    end
+
+
+    ----- managing non alt behaviour
+
+    if not alt then
+
+        -- switch selection (not alt) static build/unit under cursor
+        if modSelDefID and opt.selSwitchStatic then
+            -- if we have a modded selection, and it's a building //that is not a factory//, we look for the closest unit that is not a building //or is a factory
+            if staticBuildingDefID[modSelDefID] --[[and not factoryDefID[modSelDefID]--]] then
+                -- Echo('got building under mouse')
+                local closest
+                local minDist = math.huge
+                for i, id in ipairs(minesByDist) do
+                    local defID = mines[id]
+                    if not staticBuildingDefID[defID] --[[or factoryDefID[defID]--]] then
+                        if v.lastAcquiredSelect == id then
+                            -- if we already picked that unit before, now we pick the building
+                            break
+                        else
+                            closest = id
+                            break
+                        end
                     end
                 end
-                -- if ALT is held and a con is selected and a factory is around then we order to guard the factory
+                if closest then
+                    s.moddedSelect = closest
+                    SetColor(closest, pink)
+                end
+            else
+                -- Echo('no building')
+            end
+        end
+
+        if selContext.lobsters and not selContext.hasValidAttacker and v.defaultCmd == CMD_ATTACK then
+            v.moddedCmd = CMD_RAW_MOVE
+            v.moddedTarget = false
+            return v.moddedCmd
+            -- use Move with normal right click if no attacker 
+        end
+
+        if selContext.hasControllableRepairer then
+            if not padToRearm then
+                if v.defaultCmd == CMD_REPAIR then
+                    local suppressRepair, hasCloakedConUnderAreaCloak = false, false
+                    if v.moddedCmd == CMD_ATTACK then
+                        suppressRepair = true
+                    elseif opt.suppressRepairCloaked then
+                        local time = os.clock()
+                        if time > cacheCloakedRepairSuppress.time + 0.4 then
+                            for id in pairs(controllableRepairersMap) do
+                                if id~='n' then
+                                    if spGetUnitRulesParam(id, 'areacloaked') == 1 then
+                                        suppressRepair = true
+                                        hasCloakedConUnderAreaCloak = true
+                                        break
+                                    end
+                                end
+                            end
+                            cacheCloakedRepairSuppress.time = time
+                            cacheCloakedRepairSuppress.value = hasCloakedConUnderAreaCloak
+                        else
+                            local value = cacheCloakedRepairSuppress.value
+                            suppressRepair = value
+                            hasCloakedConUnderAreaCloak = value
+                        end
+                    end
+
+                    if suppressRepair then
+                    -- Echo('falsified',math.round(os.clock()))
+                        v.moddedCmd = false
+                        v.moddedTarget = false
+                        if not alt and hasCloakedConUnderAreaCloak then
+                            v.moddedCmd = CMD_RAW_MOVE
+                            return v.moddedCmd
+                        end
+                        return v.cmdOverride
+                    end
+                    if not v.moddedTarget and opt.findStaticRepair then -- finally also make it on default repair, so it doesnt drag a circle when pointing on the unit
+                        -- find a build to finish if any
+                        for i,id in ipairs(minesByDist) do
+                            if not controllableRepairersMap[id] or controllableRepairersMap.n>1 then
+                                local hp,maxhp,_,_,bp = spGetUnitHealth(id)
+                                if bp < 1 then
+                                -- if select(5,spGetUnitHealth(id))<1 then
+                                    buildToFinish = id
+                                    break
+                                elseif not buildToFinish and not onSelf and hp<maxhp then
+                                    buildToFinish = id
+                                end
+                            end
+                        end
+                        if buildToFinish then
+                            v.moddedTarget = buildToFinish
+                            SetColor(buildToFinish, yellow)
+                        end
+                        -- if ALT is held and a con is selected and a factory is around then we order to guard the factory
+                    end
+                end
             end
         end
     end
-    local unitToLoad
-    -- adjust the unit to load
-    if s.moddedSelect and s.moddedSelect~=s.defaultSelect then
 
-    end
-
-    -- switch selection (not alt) static build/unit under cursor
-    if modSelDefID and not alt then
-        -- if we have a modded selection, and it's a building //that is not a factory//, we look for the closest unit that is not a building //or is a factory
-        if staticBuildingDefID[modSelDefID] --[[and not factoryDefID[modSelDefID]--]] then
-            -- Echo('got building under mouse')
-            local closest
-            local minDist = math.huge
-            for i, id in ipairs(minesByDist) do
-                local defID = mines[id]
-                if not staticBuildingDefID[defID] --[[or factoryDefID[defID]--]] then
-                    if v.lastAcquiredSelect == id then
-                        -- if we already picked that unit before, now we pick the building
-                        break
-                    else
-                        closest = id
-                        break
-                    end
-                end
-            end
-            if closest then
-                if drawCircle[s.moddedSelect] then
-                    drawCircle[s.moddedSelect][6] = 0.7
-                end
-                s.moddedSelect = closest
-                if not drawCircle[s.moddedSelect] then
-                    -- local _,_,_,x,y,z = spGetUnitPosition(s.moddedSelect,true)
-                    local sx,sy = unpack(poses[s.moddedSelect])
-                    drawCircle[s.moddedSelect] = {sx,sy,0,SPOT_RADIUS,{1,0.7,1,1},1,false,true,s.moddedSelect,true}
-                else
-                    drawCircle[s.moddedSelect][5] = {1,0.7,1,1}
-                    drawCircle[s.moddedSelect][6] = 1
-                end
-            end
-        else
-            -- Echo('no building')
-        end
-    end
 
     --
     v.moddedCmd = v.moddedTarget and (
-            builderToGuard and CMD_GUARD
-            or padFound and CMD_REARM
+            (builderToGuard or unitToGuard) and CMD_GUARD
+            or padToRearm and CMD_REARM
             or buildToFinish and CMD_REPAIR
             or canTransport and not alt and (canLoadLight or canLoadHeavy) and CMD_LOAD_UNITS
-            or CMD_ATTACK
+            or commandMap['Attack'] and CMD_ATTACK
         )
         or not alt and (
                 engineCmd == CMD_GUARD
@@ -785,132 +1149,24 @@ local function Evaluate(type, id, engineCmd)
     --     return 0
     -- end
     -- Echo("spGetUnitRulesParams('areacloaked') is ",v.defaultTarget--[[, spGetUnitRulesParams('areacloaked')--]])
-    if vHas.gotControllableRepairer then  -- finally don't change the default Repair ?
-        if v.defaultCmd == CMD_REPAIR and (v.moddedCmd == CMD_ATTACK or vHas.cloaked) then
-            -- Echo('falsified',math.round(os.clock()))
-            v.moddedCmd = false
-            v.moddedTarget = false
-            if not alt and vHas.cloaked then
-                v.moddedCmd = CMD_RAW_MOVE
-                return v.moddedCmd
-            end
-            return v.cmdOverride
-        end
-    end
+
     -- Echo("v.defaultCmd is ", v.defaultCmd,Spring.GetDefaultCommand())
 
 
     v.moddedActiveCommand = false
 
-    if vHas.hasDgunOnAlt  then
-
-        if alt then
-            -- use manual fire with ALT + rightclick
-            local airDgun = vHas.airDgun
-            v.moddedActiveCommand = (airDgun and 'Air ' or '') .. 'Manual' .. (airDgun and ' ' or '') .. 'Fire'
-            if v.hasLobster then
-                v.moddedTarget = false
-            elseif not v.moddedTarget and v.defaultTarget then
-                v.moddedTarget = v.moddedTarget or v.defaultTarget
-            end
-            -- Echo("namecom, v.moddedActiveCommand is ", namecom, v.moddedActiveCommand)
-            if namecom ~= v.moddedActiveCommand then
-                spSetActiveCommand(v.moddedActiveCommand:gsub(' ',''))
-            end
-
-            v.moddedCmd = airDgun and CMD_AIR_MANUALFIRE or CMD_MANUALFIRE
-            return --[[v.cmdOverride or--]] v.moddedCmd
-        elseif vHas.hasLobster and not vHas.hasAttacker and v.defaultCmd == CMD_ATTACK then
-            v.moddedCmd = CMD_RAW_MOVE
-            -- use Move with normal right click if no attacker 
-        end
-    end
-    if alt then
 
 
-        if canTransport and canUnload and (engineCmd ~= CMD_LOAD_UNITS and (not v.moddedCmd or v.moddedCmd == CMD_RAW_MOVE or v.moddedCmd == CMD_ATTACK)) then -- giving the name of the command doesn't work for UNLOAD_UNITS
-            v.moddedActiveCommand = 'Unload units'
-            if namecom ~= v.moddedActiveCommand then
-                spSetActiveCommand(v.moddedActiveCommand:gsub(' ',''))
-            end
-            v.moddedCmd = CMD_UNLOAD_UNITS
-            return v.moddedCmd
-        elseif vHas.hasJumper and  (not v.moddedCmd or v.moddedCmd == CMD_ATTACK) then
-            local fromBuilderToBuilder
-            if vHas.gotControllableRepairer then
-                if factoryAround then
-                    fromBuilderToBuilder = true
-                else
-                    local selDefID = s.defaultSelect and tracedDefID
-                    if selDefID and controllableRepairerDefID[selDefID] then
-                        fromBuilderToBuilder = true
-                    end
-                end
-
-            end
-
-            if not fromBuilderToBuilder or not sel[2] and s.defaultSelect==sel[1] then
-                if shift or CanJumpNow(jumpers) then
-                    v.moddedActiveCommand = 'Jump'
-                    if namecom ~= v.moddedActiveCommand then
-                        spSetActiveCommand(v.moddedActiveCommand:gsub(' ',''))
-                    end
-                    v.moddedCmd = CMD_JUMP
-                    return --[[v.cmdOverride or--]] v.moddedCmd
-                end
-            end
-        end
-        if vHas.hasPuppy and (not v.moddedCmd) then
-            v.moddedActiveCommand = 'Attack'
-            if namecom ~= v.moddedActiveCommand then
-                spSetActiveCommand(v.moddedActiveCommand:gsub(' ',''))
-            end
-            v.moddedCmd = CMD_ATTACK
-            return v.moddedCmd
-        end
-        if vHas.gotAirUnit then
-            if not padAround and engineCmd == CMD_REARM then
-                padAround = s.defaultSelect or isAllied and airpadDefID[tracedDefID] and traced
-                -- if v.moddedTarget then
-                --     v.moddedTarget = false -- in case there is an ez targetted enemy close by
-                -- end
-                -- v.moddedTarget = padAround
-            elseif v.moddedTarget then -- we override the modded target to our pad if any
-                for id, defID in pairs(mines) do
-                    if airpadDefID[defID] then
-                        -- got a pad around the cursor that is not the closest but we take it anyway
-                        padAround = id
-                        break
-                    end
-                end
-
-            end
-
-            if padAround then
-                if drawCircle[padAround] then -- if the pad has been found through EzTarget
-                    drawCircle[padAround][5] = yellow
-                    drawCircle[padAround][6] = 1
-                end
-                v.moddedActiveCommand = 'Exclude'
-                if namecom ~= v.moddedActiveCommand then
-                    spSetActiveCommand(v.moddedActiveCommand:gsub(' ',''))
-                end
-                v.moddedCmd = CMD_EXCLUDE_PAD
-                v.moddedTarget = padAround
-                return v.moddedCmd
-            end
-        end
-    end
-    if namecom then
-        v.moddedActiveCommand = false
-        spSetActiveCommand(0)
-    end
     if ctrl and engineCmd~= CMD_RECLAIM then -- ctrl + move with a con will not reclaim
         return v.cmdOverride
     end
+
     if not (v.moddedCmd)  then
-        -- Echo('...', engineCmd)
-        if not engineCmd or not alt and (engineCmd == CMD_GUARD or engineCmd == CMD_RECLAIM or engineCmd == CMD_RESURRECT or engineCMD == CMD_MOVE) then
+        -- Echo('...', engineCmd, alt)
+        if not engineCmd 
+            or onSelf and engineCmd == CMD_GUARD
+            or not alt and (engineCmd == CMD_GUARD or engineCmd == CMD_RECLAIM or engineCmd == CMD_RESURRECT or engineCMD == CMD_MOVE)
+        then
             v.moddedCmd = CMD_RAW_MOVE
         end
     end
@@ -927,121 +1183,134 @@ function widget:CommandsChanged()
 
 
 
-    vHas.hasAttacker = false
-    vHas.hasJumper = false
-    vHas.hasPuppy = false
-    jumpers = {}
-    vHas.gotAirUnit = false
-    vHas.hasLobster = false
-    vHas.hasDgunOnAlt = false
-    vHas.airDgun = false
-    vHas.hasTransport = false
-    upd.treatedFrame = false
-    vHas.cloaked = false
-    v.customRadius = false
-    vHas.gotControllableRepairer = false
-    v.moddedTarget,v.moddedCmd,drawUnit=nil,nil,EMPTY_TABLE
+
     -- Echo('no more s.acquiredSelect',os.clock())
     -- Echo('reset by new selection', os.clock())
-    sel = spGetSelectedUnits()
-    if not sel[1] then
-        return
-    end
+
+    v.moddedTarget,v.moddedCmd,drawUnit=nil,nil,EMPTY_TABLE
+    upd.treatedFrame = false
     local selTypes = WG.selectionDefID or spGetSelectedUnitsSorted()
     
-    vHas.hasLobster = selTypes[lobsterDefID]
-    v.noHelperTarget = true
-    for defID in pairs(selTypes) do
+    local customRadius = false
+    local noHelperTarget =  true
+    jumpers = {}
+    controllableRepairersMap = {n=0}
+    local hasDgunOnAlt, hasAirDgun, hasAirAttackerUnit, lobsters, hasJumper, hasPuppy, hasDgunCom = false, false, false, false, false, false, false
+    local hasControllableRepairer = false
+    local hasValidAttacker, hasAttacker = false, false
+    for defID, units in pairs(selTypes) do
         -- applied if at least one air unit is selected
-        if airAttackerDefID[defID] then
-            vHas.gotAirUnit = true
-            break
+        if not hasAirAttackerUnit and airAttackerDefID[defID] then
+            hasAirAttackerUnit = true
         end
-    end
-    vHas.hasDgunOnAlt = vHas.hasLobster
-    if not vHas.hasDgunOnAlt then
-        for defID in pairs(selTypes) do
-            if dgunOnAltDefID[defID] then
-                vHas.hasDgunOnAlt = true
-            end
-            if airDgunDefID[defID] then
-                vHas.airDgun = true
-                break
-            end
+        if not hasDgunOnAlt and dgunOnAltDefID[defID] then
+            hasDgunOnAlt = true
         end
-        if not vHas.hasDgunOnAlt and next(morphedComDGUN) then
-            for i, id in pairs(sel) do
-                if morphedComDGUN[id] then
-                    vHas.hasDgunOnAlt = true
-                    break
-                end
-            end
+        if not hasAirDgun and airDgunDefID[defID] then
+            hasAirDgun = true
+        elseif defID == lobsterDefID then
+            lobsters = units
+            hasDGunOnAlt = true
+        elseif defID == puppyDefID then
+            hasPuppy = true
+        elseif jumperDefID[defID] then
+            table.merge(jumpers,units)
+            hasJumper = true
         end
-        if not vHas.hasDgunOnAlt then
-            for defID, t in pairs(selTypes) do
-                if jumperDefID[defID] then
-                    vHas.hasJumper = true
-                    table.merge(jumpers,t)
-                end
-            end
-            if not vHas.hasJumper then
-                for defID, t in pairs(selTypes) do
-                    if transportDefID[defID] then
-                        vHas.hasTransport = true
-                        break
-                    end
-                end
-                if not vHas.hasJumper then
-                    -- for defID, t in pairs(selTypes) do
-                    --     -- Echo('defid:', defID,'puppyDefID',puppyDefID)
-                    -- end
-                    vHas.hasPuppy = selTypes[puppyDefID]
-                end
 
-            end
-        end
-    end
-    controllableRepairers = {n=0}
-    for defID, t in pairs(selTypes) do
         if controllableRepairerDefID[defID] then
             local n = 0
-            for i,id in ipairs(t) do
-                controllableRepairers[id] = defID
-                if not vHas.cloaked and spGetUnitRulesParam(id, 'areacloaked') == 1 then
-                    vHas.cloaked = true
-                end
+            for i,id in ipairs(units) do
+                controllableRepairersMap[id] = defID
                 n = n + 1
             end
-            controllableRepairers.n = n
-            vHas.gotControllableRepairer = true
+            controllableRepairersMap.n = n
+            hasControllableRepairer = true
+        end
+
+        if noHelperTarget then
+             -- applied only if all units type don't need helper
+            noHelperTarget = NO_HELPER_TARGET[defID]
+        end
+        if not hasAttacker and defIDCanAttack[defID] then
+            if defID~=lobsterDefID and not EXCEPTION_EZ[defID] then
+                hasValidAttacker = true
+            end
+            hasAttacker = true
+            -- using ezTarget if at least one type of unit want it
+        end
+
+    end
+
+    local dGunCom = next(morphedComDGUN)
+    if dGunCom and selectionMap[dGunCom]  then
+        hasDgunOnAlt = true
+        hasDgunCom = true
+    end
+
+
+
+    if not noHelperTarget then
+        local minRadius = 10000
+        local defaultRadius = opt.ezTargetRadius
+        for defID in pairs(selTypes) do
+            local thisRadius = CUSTOM_RADIUS[defID]
+            if thisRadius then
+                if type(thisRadius) == 'string' then
+                    local percent = thisRadius:gsub('%%','')
+                    thisRadius = math.round(defaultRadius * percent / 100)
+                end
+                if thisRadius<minRadius then
+                    minRadius = thisRadius
+                end
+            end
+        end
+        if minRadius < 10000 then
+            customRadius = minRadius
         end
     end
 
-    for defID in pairs(selTypes) do
-        if v.noHelperTarget then
-             -- applied only if all units type don't need helper
-            v.noHelperTarget = NO_HELPER_TARGET[defID]
-        end
-        if not vHas.hasAttacker and (defIDCanAttack[defID] and defID~=lobsterDefID) and not EXCEPTION_EZ[defID] then
-            -- using ezTarget if at least one type of unit want it
-            vHas.hasAttacker = true
-        end
-        if vHas.hasAttacker and not v.noHelperTarget then
-            break
-        end
-    end
-    if not v.noHelperTarget then
-        local customRadius = 10000
-        for defID in pairs(selTypes) do
-            local thisRadius = CUSTOM_RADIUS[defID]
-            if thisRadius and thisRadius<customRadius then
-                customRadius = thisRadius
-            end
-        end
-        if customRadius<10000 then
-            v.customRadius = customRadius
-        end
-    end
+    v.noHelperTarget = noHelperTarget
+    v.customRadius = customRadius
+
+    -- copying relevant keys to feed API's mySelection table in order to reuse them elsewhere eventually
+    selContext.hasValidAttacker             = hasValidAttacker
+
+    mySelection.hasAttacker                 = hasAttacker
+
+
+    selContext.hasJumper                    = hasJumper
+    mySelection.hasJumper                   = hasJumper
+
+    selContext.hasPuppy                     = hasPuppy
+    mySelection.hasPuppy                    = hasPuppy
+
+    selContext.hasAirAttackerUnit           = hasAirAttackerUnit
+    mySelection.hasAirAttackerUnit          = hasAirAttackerUnit
+
+
+    selContext.lobsters                     = lobsters
+    mySelection.lobsters                    = lobsters
+
+    selContext.hasDgunOnAlt                 = hasDgunOnAlt
+
+    selContext.hasAirDgun                   = hasAirDgun
+    mySelection.hasAirDgun                  = hasAirDgun
+
+    mySelection.hasDgunCom                  = hasDgunCom
+
+
+    selContext.hasControllableRepairer      = hasControllableRepairer
+    mySelection.hasControllableRepairer     = hasControllableRepairer
+
+    mySelection.controllableRepairersMap    = controllableRepairersMap
+
+    mySelection.jumpers                     = jumpers
+
+    selContext.hasTransport                 = mySelection.hasTransport
+
+
+
 end
 UpdateSelection = function(sel,newsel)
     local alt, ctrl, meta, shift = spGetModKeyState()
@@ -1258,7 +1527,7 @@ function widget:Update(dt)
         -- _, s.moddedSelect = EzTarget(false,true)
         Evaluate(nature, id)
     end
-    -- v.moddedTarget = vHas.hasAttacker and (opt.ezTarget or Debug.EZ()) and EzTarget()
+    -- v.moddedTarget = selContext.hasValidAttacker and (opt.ezTarget or Debug.EZ()) and EzTarget()
     -- Echo(" owner: "..(wh.mouseOwner and wh.mouseOwner:GetInfo().name or 'none'))
 end
 
@@ -1415,13 +1684,13 @@ function widget:MousePress(mx,my,button)
         v.moddedActiveCommand = false
         activeCommand=0
     end
-    -- v.moddedTarget, s.moddedSelect =  EzTarget(vHas.hasAttacker and ((opt.ezTarget and not ctrl) or debugging), opt.ezSelect or debugging )
+    -- v.moddedTarget, s.moddedSelect =  EzTarget(selContext.hasValidAttacker and ((opt.ezTarget and not ctrl) or debugging), opt.ezSelect or debugging )
     v.acquiredTarget = v.moddedTarget or v.defaultTarget
     -- local _,_,_,v.defaultCmd = spGetDefaultCommand()
 
     if not v.clamped then 
         if nameDefCom ~= 'staticmex'  and v.moddedCmd~=CMD_UNLOAD_UNITS  then
-            if not (vHas.hasAttacker or (vHas.gotControllableRepairer or commandMap[CMD_UNLOAD_UNITS]) and v.moddedTarget) --[[or (alt and not sel[2])--]]
+            if not (selContext.hasValidAttacker or (selContext.hasControllableRepairer or commandMap[CMD_UNLOAD_UNITS]) and v.moddedTarget) --[[or (alt and not sel[2])--]]
                 or not (v.moddedTarget or (v.defaultTarget --[[or v.defaultCmd == 'Attack'--]] ) and opt.cancelWhenDragOnDefault) then
 
                 -- if nameDefCom == 'Attack' then
@@ -1796,6 +2065,7 @@ do --- EzTarget ---
     local lightred = {unpack(f.COLORS.lightred)}
     local orange = {unpack(f.COLORS.orange)}
     local yellow = {unpack(f.COLORS.yellow)}
+    local white = {unpack(f.COLORS.white)}
     local cos,sin,pi = math.cos, math.sin, math.pi
     local spGetUnitsInScreenRectangle = Spring.GetUnitsInScreenRectangle
     
@@ -1813,7 +2083,7 @@ do --- EzTarget ---
         local mx,my = spGetMouseState()
 
         local center, center2
-        local r = EZTARGET_RADIUS
+        local r = opt.ezTargetRadius
         local th = 1--EZTARGET_THRESHOLD
         drawCircle = {} -- for ops and debug
         points={} -- for debug
@@ -1930,7 +2200,7 @@ do --- EzTarget ---
         local mindistEnemy, closestEnemy = huge
         local mindistMine, closestMine = huge
         local wantEnemy = getTarget
-        local wantMine = getSelect or (vHas.gotAirUnit and getTarget)
+        local wantMine = getSelect or (selContext.hasAirAttackerUnit and getTarget)
         enemiesByDist = {}
         minesByDist = {}
         poses = {}
@@ -2043,14 +2313,14 @@ do --- EzTarget ---
         if closestEnemy then
             -- local gx,gy,gz,x,y,z = spGetUnitPosition(closestEnemy,true)
             local sx,sy = unpack(poses[closestEnemy])
-            drawCircle[closestEnemy] = {sx,sy,0,SPOT_RADIUS,orange,1,false,true,closestEnemy,true}
+            drawCircle[closestEnemy] = {sx,sy,0,SPOT_RADIUS,orange,1,false,true,true,true}
             -- enemies[closestEnemy]=nil
         end
         if closestMine then
             -- local gx,gy,gz,x,y,z = spGetUnitPosition(closestMine,true)
             local sx,sy = unpack(poses[closestMine])
 
-            drawCircle[closestMine] = {sx,sy,0,SPOT_RADIUS,lightgreen,1,false,true,closestMine,true}
+            drawCircle[closestMine] = {sx,sy,0,SPOT_RADIUS,lightgreen,1,false,true,true,true}
             -- Echo("size is ", iconSizeByDefID[spGetUnitDefID(closestMine)])
             local defID = spGetUnitDefID(closestMine)
             local height = UnitDefs[defID].height
@@ -2101,14 +2371,14 @@ do --- EzTarget ---
                 if id ~= closestEnemy then
                     -- local gx,gy,gz,x,y,z = spGetUnitPosition(id,true)
                     local sx,sy = unpack(poses[id])
-                    drawCircle[id] = {sx,sy,0,SPOT_RADIUS,darkred,0.5,false,true,id,true}
+                    drawCircle[id] = {sx,sy,0,SPOT_RADIUS,darkred,0.5,false,true,true,true}
                 end
             end
             for id in pairs(mines) do
                 if id ~= closestMine then
                     -- local gx,gy,gz,x,y,z = spGetUnitPosition(id,true)
                     local sx,sy = unpack(poses[id])
-                    drawCircle[id] = {sx,sy,0,SPOT_RADIUS,lightgreen,0.5,false,true,id,true}
+                    drawCircle[id] = {sx,sy,0,SPOT_RADIUS,lightgreen,0.5,false,true,true,true}
                 end
                 -- local x,y,z = spGetUnitPosition(id)
                 -- y = spGetGroundHeight(x,z)
@@ -2142,7 +2412,7 @@ do --- EzTarget ---
         local mx,my = spGetMouseState()
 
         local center, center2
-        local r = EZTARGET_RADIUS
+        local r = v.customRadius or opt.ezTargetRadius
         local th = 1--EZTARGET_THRESHOLD
         drawCircle = {} -- for ops and debug
         points={} -- for debug
@@ -2188,7 +2458,7 @@ do --- EzTarget ---
         local mindistMine, closestMine = huge
         local mindistAllied, closestAllied = huge
         local wantEnemy = getTarget
-        local wantMine = getSelect or (vHas.gotAirUnit and getTarget)
+        local wantMine = getSelect or (selContext.hasAirAttackerUnit and getTarget)
         -- enemiesByDist = {}
         minesByDist, mbd = {}, 0
         poses = {}
@@ -2278,14 +2548,14 @@ do --- EzTarget ---
                         local inRange = scrDist <=r
                         if  inRange then
                             if isEnemy and wantEnemy and not ignoreTargetDefID[defID] then
-                                if not v.customRadius or scrDist<=v.customRadius then
+                                -- if not v.customRadius or scrDist<=v.customRadius then
                                     if scrDist<mindistEnemy then
                                         mindistEnemy = scrDist
                                         closestEnemy = id
                                     end
                                     enemies[id]=defID
                                     poses[id] = {sx,sy,corrected = corrected}
-                                end
+                                -- end
                             elseif isMine and wantMine and not (spGetUnitNoSelect(id, cached) or spGetUnitTransporter(id) or ignoreSelectDefID[defID]) then
                                 if scrDist<mindistMine then
                                     mindistMine = scrDist
@@ -2316,14 +2586,14 @@ do --- EzTarget ---
         if closestEnemy then
             -- local gx,gy,gz,x,y,z = spGetUnitPosition(closestEnemy,true)
             local sx,sy = unpack(poses[closestEnemy])
-            drawCircle[closestEnemy] = {sx,sy,0,SPOT_RADIUS,orange,1,false,true,closestEnemy,true}
+            drawCircle[closestEnemy] = {sx,sy,0,SPOT_RADIUS,orange,1,false,true,true,true}
             -- enemies[closestEnemy]=nil
         end
         if closestMine then
             -- local gx,gy,gz,x,y,z = spGetUnitPosition(closestMine,true)
             local sx,sy = unpack(poses[closestMine])
 
-            drawCircle[closestMine] = {sx,sy,0,SPOT_RADIUS,teal,1,false,true,closestMine,true}
+            drawCircle[closestMine] = {sx,sy,0,SPOT_RADIUS,teal,1,false,true,true,true}
             -- Echo("size is ", iconSizeByDefID[spGetUnitDefID(closestMine)])
             local defID = spGetUnitDefID(closestMine)
             local height = UnitDefs[defID].height
@@ -2337,7 +2607,7 @@ do --- EzTarget ---
             -- local gx,gy,gz,x,y,z = spGetUnitPosition(closestMine,true)
             local sx,sy = unpack(poses[closestAllied])
 
-            drawCircle[closestAllied] = {sx,sy,0,SPOT_RADIUS,lightgreen,1,false,true,closestAllied,true}
+            drawCircle[closestAllied] = {sx,sy,0,SPOT_RADIUS,lightgreen,1,false,true,true,true}
             -- Echo("size is ", iconSizeByDefID[spGetUnitDefID(closestMine)])
             local defID = spGetUnitDefID(closestAllied)
             local height = UnitDefs[defID].height
@@ -2354,20 +2624,21 @@ do --- EzTarget ---
                 if id ~= closestEnemy then
                     -- local gx,gy,gz,x,y,z = spGetUnitPosition(id,true)
                     local sx,sy = unpack(poses[id])
-                    drawCircle[id] = {sx,sy,0,SPOT_RADIUS,darkred,0.5,false,true,id,true}
+                    drawCircle[id] = {sx,sy,0,SPOT_RADIUS,darkred,0.5,false,true,true,true}
                 end
             end
             for id in pairs(mines) do
                 if id ~= closestMine then
                     -- local gx,gy,gz,x,y,z = spGetUnitPosition(id,true)
                     local sx,sy = unpack(poses[id])
-                    drawCircle[id] = {sx,sy,0,SPOT_RADIUS,lightgreen,0.5,false,true,id,true}
+                    drawCircle[id] = {sx,sy,0,SPOT_RADIUS,lightgreen,0.5,false,true,true,true}
                 end
                 -- local x,y,z = spGetUnitPosition(id)
                 -- y = spGetGroundHeight(x,z)
                 -- local sx,sy = spWorldToScreenCoords(x,y,z)
                 -- drawCircle[id .. 'ground'] = {sx,sy,0,SPOT_RADIUS,darkred,1,false,true,id,true}
             end
+            drawCircle.circleDebug = {mx,my,0,r,white,0.35,false,true,false,true}
         end
         ---------
         return closestEnemy, closestMine
@@ -2528,7 +2799,7 @@ do
 
 
 
-    local DrawCircle = function(x,y,z,r,ground,plain,id,toScreen)
+    local DrawCircle = function(x,y,z,r,ground,plain,toScreen)
         if ground then
             if toScreen then
                 return
@@ -2550,15 +2821,18 @@ do
         glPopMatrix()
     end
     function widget:DrawScreen()
-        for x,y,z,r,color,alpha,ground,plain,id,toScreen in tables(drawCircle) do
+        for x,y,z,r,color,alpha,ground,plain,centerWhite,toScreen in tables(drawCircle) do
             if toScreen then
-                alpha = alpha
                 color[4]=alpha
                 glColor(color)
-                DrawCircle(x,y,z,r,ground,plain,id,toScreen)
                 color[4]=1
+                DrawCircle(x,y,z,r,ground,plain,toScreen)
+
                 glColor(1,1,1,1)
-                DrawCircle(x,y,z,r-2,ground,plain,id,toScreen)
+                -- Echo("simple is ", simple)
+                if centerWhite then
+                    DrawCircle(x,y,z,r-2,ground,plain,toScreen)
+                end
                 -- Echo(gl.DepthTest())
                 -- if spValidUnitID(id) then
                 --     -- Echo("Spring.GetUnitViewPosition(id) is ", Spring.GetUnitViewPosition(id))
@@ -2776,6 +3050,8 @@ function widget:Initialize()
     Units = WG.UnitsIDCard
     commandMap = WG.commandMap or {}
     mySelection = WG.mySelection
+    selectionMap = WG.selectionMap
+    selection = WG.selection
 
 
     PreSelection_IsSelectionBoxActive = WG.PreSelection_IsSelectionBoxActive

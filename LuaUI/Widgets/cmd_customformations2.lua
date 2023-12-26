@@ -325,6 +325,11 @@ local spGetCameraPosition = Spring.GetCameraPosition
 local spGetViewGeometry = Spring.GetViewGeometry
 local spTraceScreenRay = Spring.TraceScreenRay
 
+local spGetMyTeamID	= Spring.GetMyTeamID
+local spAreTeamsAllied = Spring.AreTeamsAllied
+local spGetUnitTeam	= Spring.GetUnitTeam
+
+
 local mapSizeX, mapSizeZ = Game.mapSizeX, Game.mapSizeZ
 local maxUnits = Game.maxUnits
 
@@ -356,6 +361,8 @@ local REMOVED_SET_WANTED_MAX_SPEED = not CMD.SET_WANTED_MAX_SPEED
 local keyShift = 304
 local keyAlt = 308
 local filledCircleOutFading = {} --Table of display lists keyed by cmdID
+
+local myTeamID = spGetMyTeamID()
 
 --------------------------------------------------------------------------------
 -- Helper Functions
@@ -798,9 +805,13 @@ local function TweakTarget(pos, mx, my, acquiredTarget, singleNode)
 	if not id and not selectionDefID[lobsterDefID] then
 		local targType
 		targType, id = CulledTraceScreenRay(mx, my, false, inMinimap)
-		if targType == 'feature' then
+		--[[if targType == 'feature' then
 			id = id + maxUnits
-		elseif targType ~= 'unit' then
+		else--]]if targType == 'unit' then
+			if spAreTeamsAllied(myTeamID, spGetUnitTeam(id)) then
+				id = false
+			end
+		else
 			id = false
 		end
 	end
@@ -915,9 +926,9 @@ function widget:MousePress(mx, my, mButton, byEz)
 			if targType then
 				defaultCmdID = CMD_RAW_MOVE
 			else
-				if nameDefCom == 'Attack' then
-					Echo('CF2 let the Area Attack pass ! 1')
-				end
+				-- if nameDefCom == 'Attack' then
+				-- 	Echo('CF2 let the Area Attack pass ! 1')
+				-- end
 				return false
 			end
 		end
@@ -1554,9 +1565,12 @@ end
 local function SetFormationRank(unitID, newRank)
 	formationRank[unitID] = newRank
 end
-
+function widget:PlayerChanged()
+	myTeamID = spGetMyTeamID()
+end
 function widget:Initialize()
 	-- filledCircle = gl.CreateList(gl.BeginEnd, GL.TRIANGLE_FAN, filledCircleVerts, 8)
+	widget:PlayerChanged()
 	InitFilledCircle(CMD_MOVE)
 	InitFilledCircle(CMD_RAW_MOVE)
 	InitFilledCircle(CMD_ATTACK)

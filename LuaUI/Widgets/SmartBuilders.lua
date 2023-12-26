@@ -1260,9 +1260,9 @@ function widget:CommandNotify(cmd,params)
                 end
             end
         end
-        if not applied then
-            Echo('debug SB, want cloak but no com detected ?', os.clock())
-        end
+        -- if not applied then
+        --     Echo('debug SB, want cloak but no com detected ?', os.clock())
+        -- end
     end
 end
 

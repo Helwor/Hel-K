@@ -8,7 +8,7 @@ function widget:GetInfo()
 		author    = 'Helwor',
 		date      = 'August, 2020',
     	license   = 'GNU GPL, v2 or later',
-		layer     = -12, -- formerly 1000, now testing before EzTarget
+		layer     = -11, -- now just after EzTarget, formerly just before EzTarget, formerly 1000, 
 		enabled   = true,
 		handler   = true,
 	}
@@ -1864,21 +1864,42 @@ local hotkeysCombos={
 			-- long click will select all commandos
 			-- multiple click will select one more same type commando, preferably unloaded
 			-- except for scythes, when all will be selected in radius at once at second click
+			-- {name='One Commando', -- stealth and close combat units
+			-- 	method='cylinder',
+			-- 	force_finish = true,
+			-- 	keys={'?SPACE', '?AIR','N_3','RClick'},
+			-- 	from_cursor=true,
+			-- 	-- NOTE: to fasten search, precise a broader boolean category ('isUnit' here) as first index to avoid the four OR statements check on useless structures
+			-- 	defs={'isUnit',['?name']={'cloakheavyraid','striderscorpion','striderantiheavy','spiderantiheavy'}},
+			-- 	prefer={	{['?']={ -- Note: this is not with priority in contrary to the Cons (idle) macro (no different subsets), thanks to byType=defID, it will alternate through unit type, but it will not pick any unloaded
+			-- 								{['name']='striderscorpion',['reload']=3},
+			-- 								{['name']='spiderantiheavy'--[[,['reload']=1--]]},
+			-- 								['?name']={'cloakheavyraid','striderantiheavy'},
+			-- 				}},
+			-- 			{'isUnit'}
+			-- 	},
+			-- 	byType='defID', -- alternate between defIDs
+			-- 	-- typeOrder = 'byClosest',
+
+			-- 	selname=true, -- show the unit name instead of the macro name
+			-- 	want=1,
+			-- 	pref_use_prev = true,
+			-- 	previous_time = 0.5,
+			-- 	color={0.6, 0.9, 0.85, 0.99},fading=0.5
+			-- },
 			{name='One Commando', -- stealth and close combat units
 				method='cylinder',
 				force_finish = true,
 				keys={'?SPACE', '?AIR','N_3','RClick'},
 				from_cursor=true,
 				-- NOTE: to fasten search, precise a broader boolean category ('isUnit' here) as first index to avoid the four OR statements check on useless structures
-				defs={'isUnit',['?name']={'cloakheavyraid','striderscorpion','striderantiheavy','spiderantiheavy'}},
-				prefer={	{['?']={ -- Note: this is not with priority in contrary to the Cons (idle) macro (no different subsets), thanks to byType=defID, it will alternate through unit type, but it will not pick any unloaded
-											{['name']='striderscorpion',['reload']=3},
-											{['name']='spiderantiheavy'--[[,['reload']=1--]]},
-											['?name']={'cloakheavyraid','striderantiheavy'},
-							}},
-						{'isUnit'}
+				groups={
+					{name = 'cloakheavyraid'},
+					{name = 'striderscorpion'},
+					{name = 'striderantiheavy'},
+					{name = 'spiderantiheavy'},
 				},
-				byType='defID', -- alternate between defIDs
+				
 				-- typeOrder = 'byClosest',
 
 				selname=true, -- show the unit name instead of the macro name
@@ -1888,25 +1909,24 @@ local hotkeysCombos={
 				color={0.6, 0.9, 0.85, 0.99},fading=0.5
 			},
 
-
 			{name='More Commando(s)', 
 				method='cylinder',
 				keys={'?AIR','?SPACE', 'N_3','RClick','doubleRClick','?spam'},
 				from_cursor=true,
-				defs={'isUnit',['?name']={'cloakheavyraid','striderscorpion','striderantiheavy','spiderantiheavy'}},
-				prefer={	{['?']={ -- Note: this is not with priority in contrary to the Cons (idle) macro (no different subsets), thanks to byType=defID, it will alternate through unit type, but it will not pick any unloaded
-											{['name']='striderscorpion',['reload']=3},
-											{['name']='spiderantiheavy',['reload']=1},
-											['?name']={'cloakheavyraid','striderantiheavy'},
-							}},
-						{'isUnit'}
-				},
+				defs={ name = {'cloakheavyraid','striderscorpion','striderantiheavy','spiderantiheavy'}},
+				-- prefer={	{['?']={ -- Note: this is not with priority in contrary to the Cons (idle) macro (no different subsets), thanks to byType=defID, it will alternate through unit type, but it will not pick any unloaded
+				-- 							{['name']='striderscorpion',['reload']=3},
+				-- 							{['name']='spiderantiheavy',['reload']=1},
+				-- 							['?name']={'cloakheavyraid','striderantiheavy'},
+				-- 			}},
+				-- 		{'isUnit'}
+				-- },
 				same_units=true, -- picking same units name as current selection, if we have something in the selection
 
 				ignore_from_sel=true, -- remove from possible units those that are already selected, this to prevent priority2 to get overriden by units already selected
 				shift=true,
 				want=1,
-				wantIf={[{['name']='cloakheavyraid'}]=false}, -- want only one if the name is not 'cloakheavyraid' ('Scythe')
+				wantIf={[{['name']='cloakheavyraid'}]='30%'}, -- want only one if the name is not 'cloakheavyraid' ('Scythe')
 				shared_prev='One Commando', -- same previous system as 'One Commando' macro so we don't pick the same that were picked there
 				color={0.2, 0.5, 1, 0.99},
 				fading=0.5,
@@ -1917,9 +1937,9 @@ local hotkeysCombos={
 			{name='All Commandos', 
 				method='cylinder',
 				keys={'?SPACE', '?AIR','N_3','RClick','longClick','?doubleRClick','?spam'},
-				defs={'isUnit'},
+				-- defs={'isUnit'},
 				-- on_press=true,
-				longPressTime = 0.15, -- longPress is evaluated true within 0.2 sec, very swiftly
+				longPressTime = 0.15, -- longPress is evaluated true within that time
 				color={0.2, 0.5, 1, 0.99},
 				fading=0.5,
 				-- force_finish = true, -- achieve 'One Commando' call before starting this one
@@ -2977,30 +2997,30 @@ local hotkeysCombos={
 			-- 
 
 
-			{name='One Likho/Rag',
+			{name='One Likho',
 			method='all',
 			keys={'?SPACE','N_5','AIR'},
 			on_press=true,
-			defs={['name']={'bomberheavy','bomberassault'},['!p:noammo']={1,2}},
+			defs={['name']={'bomberheavy'},['!p:noammo']={1,2}},
 			want=1,
 			previous_time=0.01,-- forget previous selection faster, default is 5 second -- TODO make [previous] cancellable instead
 			from_cursor=true,
 			no_key_order = true,
 			color={0.9, 0.9, 0.3, 1},fading=0.8},
 
-			{name='One More Likho/Rag',
+			{name='One More Likho',
 			method='all',
 			keys={'?SPACE','AIR','N_5','doubleTap','?spam'},
 			defs={--[[['name']={'bomberheavy','bomberassault'},--]]['!p:noammo']={1,2}},
 			same_units = true, -->>
 			want=1,
-			previous_time=0.6,-- forget previous selection faster, default is 5 second
+			previous_time=0.5,-- forget previous selection faster, default is 5 second
 			on_press=true,
 			from_cursor=true,
 			shift=true,
 			color={0.9, 0.9, 0.3, 1},fading=0.8},
 
-			{name='All Loaded Likhos/Rag',
+			{name='All Loaded Likhos',
 			method='all',
 			keys={'?SPACE','AIR','N_5','doubleTap','longPress','?spam','?mouseStill'},
 			defs={['!p:noammo']={1,2}},
@@ -3017,6 +3037,51 @@ local hotkeysCombos={
 			longPressTime = 0.2,
 
 			color={1.0, 0.0, 0.5, 0.8},fading=0.6},
+
+
+
+			{name='One Odin',
+			method='all',
+			keys={'?SPACE','N_6','AIR'},
+			on_press=true,
+			defs={['name']={'bomberassault'},['!p:noammo']={1,2}},
+			want=1,
+			previous_time=0.01,-- forget previous selection faster, default is 5 second -- TODO make [previous] cancellable instead
+			from_cursor=true,
+			no_key_order = true,
+			color={0.9, 0.9, 0.3, 1},fading=0.8},
+
+			{name='One More Odin',
+			method='all',
+			keys={'?SPACE','AIR','N_6','doubleTap','?spam'},
+			defs={--[[['bomberassault'},--]]['!p:noammo']={1,2}},
+			same_units = true, -->>
+			want=1,
+			previous_time=0.5,-- forget previous selection faster, default is 5 second
+			on_press=true,
+			from_cursor=true,
+			shift=true,
+			color={0.9, 0.9, 0.3, 1},fading=0.8},
+
+			{name='All Loaded Odins',
+			method='all',
+			keys={'?SPACE','AIR','N_6','doubleTap','longPress','?spam','?mouseStill'},
+			defs={['!p:noammo']={1,2}},
+			same_units = true,
+			on_press=true,
+			longPressTime = 0.2,
+			color={1.0, 0.0, 0.5, 0.8},fading=0.6},
+
+			{name='All Odins',
+			method='all',
+			keys={'?SPACE','N_6','AIR','longPress','?mouseStill'},
+			defs={['name']={'bomberassault'}},
+			on_press=true,
+			longPressTime = 0.2,
+
+			color={1.0, 0.0, 0.5, 0.8},fading=0.6},
+
+
 
 
 
@@ -4143,27 +4208,30 @@ do ---- **INITIALIZATION** ------
 			if macro.longPressTime and not macro.isShortPressVersion then
 				local mouseStillThreshold = macro.mouseStillThreshold
 				-- Echo('longPress macro : ' .. macro.name)
-				local keysByKey = {}
+				local keysByKey, orKeys = {}, {}
+				local hasClick,hasDouble
+				local orDouble = {}
 				for i,key in ipairs(macro.keys) do 
 					if type(key) == 'table' then
 						key = key[1]
 					end
-					if not key:match('^%?')  then
+					if key:match('^%?')  then
+						if key:match('double') then
+							orDouble[key:gsub('%?','')] = i
+						end
+					else
 						-- Echo('add to keysByKey',key .. ' = ' .. i)
 						keysByKey[key] = i
+						if key:match('Click') then
+							hasClick=true
+						end
+						if key:match('double') then
+							hasDouble=true
+						end
 					end
 					-- keysByKey[key:gsub('?','')]=i
 				end
 
-				local hasClick,hasDouble
-				for key in pairs(keysByKey) do
-					if key:match('Click') then
-						hasClick=true
-					end
-					if key:match('double') then
-						hasDouble=true
-					end
-				end
 				local pressOrClick = hasClick and 'Click' or 'Press'
 
 
@@ -4200,6 +4268,19 @@ do ---- **INITIALIZATION** ------
 				-- Echo('short press version : ' .. (shortPress_version.name or 'dummy'))
 				shortPress_version.longPressTime = macro.longPressTime
 				shortPress_version.mouseStillThreshold = mouseStillThreshold
+
+				if next(orDouble) then
+					local key, i = next(orDouble)
+					keysByKey[key] = i
+					local shortPress_version2 = HKCombos:Find(keysByKey,'dontRmb'--[[,'tell'--]])
+					if shortPress_version2 and shortPress_version2 ~= shortPress_version then
+						-- Echo('found another shortpress version', shortPress_version2.name)
+						shortPress_version2.longPressTime = macro.longPressTime
+						shortPress_version2.mouseStillThreshold = mouseStillThreshold
+					end
+				end
+
+
 				shortPress_version.isShortPressVersion = true
 				macro.longPressTime = nil
 				macro.mouseStillThreshold = nil
@@ -4750,6 +4831,10 @@ end
 ---------------------------------------
 ---------------------------------------
 -----------	COMBO DETECTION -----------
+
+local changeCommand = false
+
+
 do
 	--// Annexes
 	-- Finding own macros
@@ -5297,7 +5382,10 @@ do
 --[[		if hasCombo and g.hkCombo.keep_on_fail and sel.n==0 then			if g.debuggingKeyDetections then Echo('keep_on_fail: '..clickName..' triggered a more complex call but found nothing, we keep the previous selection and mouse is not blocked')	end
 		  return false
 		end--]]
-		end			
+		end		
+		if hasCombo and button == 3 and g.hkCombo.force then
+			changeCommand = 1
+		end
 		return hasCombo
 	end 
 end
@@ -5343,9 +5431,34 @@ function widget:SelectionChanged(newsel)
 	if lockSelection then --[[Echo('LOCKED')--]] lockSelection=false return currentSel end
 end
 
+function widget:DefaultCommand(_,_,engineCmd)
+	if changeCommand then
+		-- Echo('engineCmd', engineCmd,'time',math.round(os.clock()),'state',Spring.GetMouseState())
+		local _,_,_,_,rmb = Spring.GetMouseState()
+		if not rmb then
+			-- changeCommand = changeCommand - 1
+			-- if changeCommand == 0 then
+				changeCommand = false
+			-- end
+			return
+		end
+		return 0
+	end
 
-
-
+end
+-- function widget:CommandNotify(cmd)
+-- 	Echo('CN',cmd)
+-- 	if cmd ~= 0 then
+-- 		if changeCommand then
+-- 			Echo('engineCmd', cmd,changeCommand,'time',math.round(os.clock()))
+-- 			if cmd == changeCommand then	
+-- 				changeCommand = false
+-- 				return true
+-- 			end
+-- 			changeCommand = false
+-- 		end
+-- 	end
+-- end
 function widget:MouseRelease(mx,my,button)
 	-- MouseRelease used normally and also arbitrarily by CheckClick function to complete click detection
 
@@ -5354,7 +5467,9 @@ function widget:MouseRelease(mx,my,button)
 	--if (widgetHandler:IsMouseOwner())then 					
 	--widgetHandler:DisownMouse() end
 	-- in case of handler=true:
+
 	if widgetHandler.mouseOwner == widget then
+
 	 	if g.debuggingKeyDetections then Echo('MR: 2 buttons were pressed, forcing disownership') end
 		widgetHandler.mouseOwner=nil
 	end
@@ -5367,9 +5482,10 @@ function widget:MouseRelease(mx,my,button)
 					  or last.call and (last.call.on_press or last.call.failed) and last.call.disable_SM) then
 		g.SM_Enabled.value=false
 		g.SM_SwitchOn=true
-
 	end
+
 	widget:KeyRelease(clickName)  -- sending click release to get treated as a regular key release
+	return 
 end
 
 
@@ -6404,7 +6520,8 @@ do
 			want = pool.n+want
 		end
 		if percent and n>0 then
-			want = ceil(n*call.want/100)
+
+			want = ceil(n*want/100)
 			if want==n and n>1 then want=want-1 end -- want one less unit if the rounding didnt make any change
 		end
 
@@ -6412,7 +6529,6 @@ do
 		---
 		--Acquire( pool of units to pick from, want number of unit, previous selected unit to ignore, valid units for confirmation)
 		-- if not want and not g.Type then call.prevIgnore=true end
-
 		return want or n
 	end
 end
@@ -7921,19 +8037,19 @@ do
 end
 
 
-	function widget:CommandNotify()
-		if selectionResized then
-			-- Echo('--- resized')
-			-- for k,v in pairs(selectionResized) do
-			-- 	Echo(k,v)
-			-- end
-			-- Echo('full')
-			-- for k,v in pairs(fullSel) do
-			-- 	Echo(k,v)
-			-- end
-		end
+	-- function widget:CommandNotify()
+	-- 	if selectionResized then
+	-- 		-- Echo('--- resized')
+	-- 		-- for k,v in pairs(selectionResized) do
+	-- 		-- 	Echo(k,v)
+	-- 		-- end
+	-- 		-- Echo('full')
+	-- 		-- for k,v in pairs(fullSel) do
+	-- 		-- 	Echo(k,v)
+	-- 		-- end
+	-- 	end
 
-	end
+	-- end
 
 
 	function widget:CommandsChanged(force)
