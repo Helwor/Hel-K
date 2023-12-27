@@ -6,7 +6,7 @@ function widget:GetInfo()
 		date      = "Jan 6th, 2016",
 		license   = "GPLv2",
 		version   = "1",
-		layer     = 1000,
+		layer     = 999, -- originally 1000 but mouse press on active control would not be detected clicking and 'holdingForSelection' would stay true
 		enabled   = true,  --  loaded by default?
 		api       = true,
 		alwaysStart = true,
@@ -293,11 +293,16 @@ end
 function widget:MousePress(x, y, button)
 	screenStartX = x
 	screenStartY = y
-	if (button == 1) and spGetActiveCommand() == 0 then
-		thruMinimap = not WG.MinimapDraggingCamera and spIsAboveMiniMap(x, y)
-		local _
-		_, start = SafeTraceScreenRay(x, y, true, thruMinimap)
-		holdingForSelection = true
+	holdingForSelection = false
+	if (button == 1) then
+		if spGetActiveCommand() == 0 then
+			thruMinimap = not WG.MinimapDraggingCamera and spIsAboveMiniMap(x, y)
+			if thruMinimap or not (WG.Chili and WG.Chili.Screen0:IsAbove(x,y)) then
+				local _
+				_, start = SafeTraceScreenRay(x, y, true, thruMinimap)
+				holdingForSelection = true
+			end
+		end
 	end
 end
 function widget:PlayerChanged()

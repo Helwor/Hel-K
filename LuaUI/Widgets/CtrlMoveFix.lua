@@ -1,7 +1,7 @@
 local ver = 0.1
 function widget:GetInfo()
     return {
-        name      = "Ctrl Move Fix",
+        name      = "Ctrl Move Fix (experimental)",
         desc      = "[NOT WORKING REALLY] Adjust group speed continuously according to their 2D speed (speed change when climbing/ going down hill)",
         author    = "Helwor",
         version   = ver,
@@ -21,21 +21,27 @@ local spGetUnitVelocity = Spring.GetUnitVelocity
 local spGiveOrderToUnitMap = Spring.GiveOrderToUnitMap
 local spGiveOrderToUnit = Spring.GiveOrderToUnit
 local spValidUnitID = Spring.ValidUnitID
-local Units
+local spGetUnitMoveTypeData = Spring.GetUnitMoveTypeData
+-- local Units
 
 local selection, selDefIDS = {n=0}, {}
-local selectionMap
+
 local currentFrame = Spring.GetGameFrame()
 
 local speedDefID = {}
-local customCmds = VFS.Include("LuaRules/Configs/customcmds.lua")
-local CMD_WANTED_SPEED = customCmds.WANTED_SPEED
-local CMD_RAW_MOVE =  customCmds.RAW_MOVE
+local CMD_WANTED_SPEED, CMD_RAW_MOVE
+do
+    local customCmds = VFS.Include("LuaRules/Configs/customcmds.lua")
+    CMD_WANTED_SPEED = customCmds.WANTED_SPEED
+    CMD_RAW_MOVE =  customCmds.RAW_MOVE
+end
 local CMD_MOVE = CMD.MOVE
 local groupByID, groups, poses, updateNow = {}, {}, {}, {}, {}
 
-local UPDATE_RATE = 5-- number of frames between update
 
+local THRESHOLD = 2 -- minimum diff of slowest speed at which we start caring about updating unit speed
+local SMOOTH = 0.5 -- maximum speed up change relative to max possible speed between cycle
+local SMOOTH_FLOOR = 15 -- minimum smoothing allowed in absolute value
 
 --- FUNCTIONMENT
     -- we set a group leader at first that have the min speed
@@ -49,10 +55,79 @@ local UPDATE_RATE = 5-- number of frames between update
 
 
 local cfg = {
-    drawDebug = false,
-    speedDebug = false
+    active = false,
+    updateRate = 19,-- number of frames between update
+    drawDebug = true,
+    speedDebug = false,
+}
+options_path = 'Hel-K/' .. widget:GetInfo().name
+options_order = {
+    'active',
+    'updateRate',
+    'drawDebug',
+    'speedDebug',
+}
+options = {}
+
+options.active = {
+    name = 'Active',
+    type = 'bool',
+    value = cfg.active,
+    OnChange = function(self)
+        if self.value then
+            if widgetHandler.Wake then
+                widgetHandler:Wake(widget)
+            else
+                for name in pairs(widget) do
+                    if type(name) == 'string' and widgetHandler[name .. 'List'] then
+                        widgetHandler:UpdateWidgetCallIn(name, widget)
+                    end
+                end
+            end
+            widget:CommandsChanged()
+        else
+            if widgetHandler.Sleep then
+                widgetHandler:Sleep(widget)
+            else
+                for name in pairs(widget) do
+                    if type(name) == 'string' and widgetHandler[name .. 'List'] then
+                        widgetHandler:RemoveWidgetCallIn(name, widget)
+                    end
+                end
+            end
+        end
+    end
 }
 
+options.updateRate = {
+    name = 'Update Rate',
+    type = 'number',
+    min = 1, max = 60, step = 1,
+    value = cfg.updateRate,
+    OnChange = function(self)
+        cfg[self.key] = self.value
+    end,
+}
+
+options.drawDebug = {
+    name = 'Draw Debug',
+    type = 'bool',
+    value = cfg.drawDebug,
+    OnChange = function(self)
+        cfg[self.key] = self.value
+    end,
+}
+options.speedDebug = {
+    name = 'Speed Debug',
+    type = 'bool',
+    value = cfg.speedDebug,
+    OnChange = function(self)
+        cfg[self.key] = self.value
+    end,
+}
+
+
+local SPEED_TABLE = {-1}
 
 local GetRandomizedColor
 do
@@ -100,9 +175,12 @@ end
 -- end
 
 function widget:Initialize()
-    -- Units = WG.UnitsIDCard
-    selectionMap = WG.mySelection.byID
-    widget:CommandsChanged()
+    if not options.active.value then
+        options.active:OnChange(options.active)
+    else
+        widget:CommandsChanged()
+    end
+
 end
 
 local NewGroup = function()
@@ -111,7 +189,7 @@ end
 
 
 local function GetLowest2DSpeedOLD(group) -- finally useless
-    local toBeReduced = {}
+    local speedChangeUnits = {}
     local sp = 10000
     local naturalLowestSpeed = group.idealSpeed
     -- Echo('group low speed = ' .. naturalLowestSpeed)
@@ -128,7 +206,7 @@ local function GetLowest2DSpeedOLD(group) -- finally useless
         end
 
         if baseSpeed > naturalLowestSpeed then
-            toBeReduced[id] = true
+            speedChangeUnits[id] = true
         else
             local vx,vy,vz, v = spGetUnitVelocity(id)
             -- local md = Spring.GetUnitMoveTypeData(id)
@@ -158,105 +236,128 @@ local function GetLowest2DSpeedOLD(group) -- finally useless
     -- Echo('====> ',sp * 30)
     if sp == 10000 then
         -- Echo('use normal low speed', naturalLowestSpeed)
-        return naturalLowestSpeed, toBeReduced
+        return naturalLowestSpeed, speedChangeUnits
     end
     if math.round(sp * 1000) == math.round(group.speed * 1000) then
         -- Echo(' no need to do anything')
         return sp
     end
-    return sp, toBeReduced
+    return sp, speedChangeUnits
 end
-
+local f = VFS.Include('LuaUI\\Widgets\\UtilsFunc.lua')
 local function GetLowest2DSpeed(group)
     local debugMe = cfg.debugSpeed
     if debugMe then
         Echo('---------------------')
     end
-    local toBeReduced = {}
-    local toUnnerf = {}
+    local speedChangeUnits = {}
+
     local idealSpeed = group.idealSpeed
     local leader = group.leader -- the leader is the one that is the slowest but having the ideal speed limitation
+    -- if the leader happen to have same speed than the last given speed, 
     local naturalLowestSpeed = idealSpeed
+    local smoothing = math.max(naturalLowestSpeed * SMOOTH, SMOOTH_FLOOR)
+    naturalLowestSpeed = math.min(leader.currentSpeed  + smoothing, naturalLowestSpeed)
+
     local naturalSlowest = leader
     local units = group.units
     local groupSpeed = group.speed
     if not group.initialized then
-        for id, unit in pairs(units) do
-            if groupSpeed < unit.baseSpeed then
-                unit.nerfedSpeed = groupSpeed
-            end
-        end
+        -- for id, unit in pairs(units) do
+        --     if groupSpeed < unit.baseSpeed then
+        --         unit.nerfedSpeed = groupSpeed
+        --     end
+        -- end
         group.initialized = true
+    else
+        local smoothing = math.max(naturalLowestSpeed * SMOOTH, SMOOTH_FLOOR)
+        naturalLowestSpeed = math.min(leader.currentSpeed  + smoothing, naturalLowestSpeed)
     end
 
+    local speedLowered = false
+
+    -- local dbg = false
     for id, unit in pairs(units) do
-        local vx,_,vz, v = spGetUnitVelocity(id)
+        -- if not dbg then
+        --     f.Page(spGetUnitMoveTypeData(id), {all = true})
+        -- end
+        local vx,_,vz, speed3D = spGetUnitVelocity(id)
         local speed2D = 30 * ((vx^2 + vz^2) ^ 0.5)
+        -- if id == next(units) then
+        --     Echo(id,'speed3D',(speed3D * 30) .. '/' .. unit.baseSpeed)
+        -- end
+        -- Echo("speed2D, Spring.GetUnitSpeed(id) is ", speed2D)
         if debugMe then
             Echo('# ' .. id .. ' ' .. UnitDefs[Spring.GetUnitDefID(id)].name,'base',unit.baseSpeed,'current:',('%.1f'):format(speed2D),'nerfedSpeed:',unit.nerfedSpeed and ('%.1f'):format(unit.nerfedSpeed) or tostring(unit.nerfedSpeed))
         end
         unit.currentSpeed = speed2D
+        unit.currentSpeed3D = speed3D
         local nerfedSpeed = unit.nerfedSpeed
-
-        if not nerfedSpeed or (nerfedSpeed-speed2D) > 0.25 then
+        if not nerfedSpeed or speed2D < (nerfedSpeed - THRESHOLD) then
             -- we count the speed of the unit if it's not nerfed, or if it is even slower than its nerf due to natural cause
-            if speed2D < naturalLowestSpeed and (naturalLowestSpeed-speed2D) > 0.25 then
+            if speed2D < (naturalLowestSpeed - THRESHOLD) then
                 naturalLowestSpeed = speed2D
                 naturalSlowest = unit
+                speedLowered = true
             end
         end
     end
-
-
+    -- if slowest unit of the last cycle is the same as this one and it's 
 
 
     if naturalSlowest ~= leader then
+        leader = naturalSlowest
         group.leader = naturalSlowest
         -- Echo('leader changed:',UnitDefs[Spring.GetUnitDefID(leader.id)].name .. ' => ' .. UnitDefs[Spring.GetUnitDefID(naturalSlowest.id)].name)
         -- spGiveOrderToUnit(naturalSlowest.id,CMD_WANTED_SPEED,{idealSpeed},0)
         -- we free the unit from any nerf so it will get back to ideal speed in best case
     end
+
     if debugMe then
-        Echo('naturalSlowest = ' .. ('%.1f'):format(naturalLowestSpeed))
+        Echo('naturalSlowest = ' .. (naturalSlowest and UnitDefs[Spring.GetUnitDefID(naturalSlowest.id)].name or 'none'), ('%.1f'):format(naturalLowestSpeed), 'idealSpeed', idealSpeed)
     end
     for id, unit in pairs(units) do
         -- if unit is too fast or have been nerfed too much, we set the it the current slowest speed (not counting the nerfed one)
-        if unit.currentSpeed - naturalLowestSpeed > 0.25 then
+        if unit.currentSpeed > (naturalLowestSpeed + THRESHOLD) then
             if debugMe then
                 Echo('Set because too fast: ' .. '# ' .. id .. ' ' .. UnitDefs[Spring.GetUnitDefID(unit.id)].name ..  ' => ' .. ('%.1f'):format(naturalLowestSpeed))
             end
             unit.nerfedSpeed = naturalLowestSpeed
 
-            toBeReduced[id] = true
+            speedChangeUnits[id] = true
 
-        elseif unit.nerfedSpeed and (naturalLowestSpeed - unit.nerfedSpeed) > 0.25 then
+        elseif unit.nerfedSpeed and unit.nerfedSpeed < (naturalLowestSpeed + THRESHOLD) then
             if debugMe then
                 Echo('Set because too slow: ' .. '# ' .. id .. ' ' .. UnitDefs[Spring.GetUnitDefID(unit.id)].name ..  ' => ' .. ('%.1f'):format(naturalLowestSpeed))
             end
 
-            unit.nerfedSpeed = (unit.baseSpeed - naturalLowestSpeed) > 0.25 and naturalLowestSpeed
+            -- unit.nerfedSpeed = unit.baseSpeed > naturalLowestSpeed and naturalLowestSpeed
+            unit.nerfedSpeed = naturalLowestSpeed < idealSpeed and naturalLowestSpeed
 
-            toBeReduced[id] = true
+            speedChangeUnits[id] = true
 
         -- if id ~= naturalSlowest.id then
         elseif unit.nerfedSpeed and group.idealSpeed == naturalLowestSpeed and math.round(unit.nerfedSpeed) == naturalLowestSpeed then
             unit.nerfedSpeed = nil
         end
     end
-
-    return naturalLowestSpeed, toBeReduced
+    return naturalLowestSpeed, speedChangeUnits
 end
 
 
 
 
 local function SetGroupSpeed(group, cnt)
-    local sp, toBeReduced = GetLowest2DSpeed(group)
+    local sp, speedChangeUnits = GetLowest2DSpeed(group)
 
-    if toBeReduced then
-        -- Echo('group #' .. cnt .. ', size: ' .. table.size(group) .. ', to be reduced: ' .. table.size(toBeReduced) .. ', lowest speed ' .. ' : ' .. sp)
-        spGiveOrderToUnitMap(toBeReduced,CMD_WANTED_SPEED,{sp},0)
+    if speedChangeUnits then
+        if cfg.debugSpeed then
+           Echo('group #' .. cnt .. ', size: ' .. table.size(group) .. ', to be reduced: ' .. table.size(speedChangeUnits) .. ', lowest speed ' .. ' : ' .. sp)
+        end
+        SPEED_TABLE[1] = sp
+        spGiveOrderToUnitMap(speedChangeUnits,CMD_WANTED_SPEED,SPEED_TABLE,0)
         group.speed = sp
+        -- updateNow[group] = true
     end
 end
 
@@ -341,7 +442,7 @@ function widget:CommandNotify(cmd, params, opts)
                     unit = RemoveFromGroup(id)
                 end
                 if not unit then
-                    unit = {id = id, baseSpeed = baseSpeed, currentSpeed = baseSpeed, nerfedSpeed = nil}
+                    unit = {id = id, baseSpeed = baseSpeed, currentSpeed = baseSpeed, currentSpeed3D = baseSpeed, nerfedSpeed = nil}
                 end
                 AddToGroup(id, unit, group)
                 poses[id] = {spGetUnitPosition(id)}
@@ -410,7 +511,7 @@ function widget:GameFrame(f)
         SetGroupSpeed(group, 'now')
         updateNow[group] = nil
     end
-    -- if f%UPDATE_RATE == math.round(UPDATE_RATE)/2 then
+    -- if f%cfg.updateRate == math.round(cfg.updateRate)/2 then
     --     if next(groups) then
     --         local cnt = 0
     --         for group in pairs(groups) do
@@ -421,7 +522,7 @@ function widget:GameFrame(f)
     --         end
     --     end
     -- end
-    if f%UPDATE_RATE == 0 then
+    if f%cfg.updateRate == 0 then
         if next(groups) then
             
             local cnt = 0
@@ -431,7 +532,7 @@ function widget:GameFrame(f)
             end
         end
     end
-    -- if f%UPDATE_RATE == 0 then
+    -- if f%cfg.updateRate == 0 then
     --     -- EchoGroups()
     -- end
 end
@@ -443,15 +544,7 @@ function widget:UnitDestroyed(id)
 end
 
 function widget:CommandsChanged()
-    -- if selectionMap and Units then
-    --     selection = copy(selectionMap)
-    --     for id, unit in pairs(selection) do
-    --         if unit.isStructure then
-    --             selection[id] = nil
-    --         end
-    --     end
-    --     return
-    -- end
+
     local n = 0
     for k in pairs(selection) do
         selection[k] = nil
@@ -499,7 +592,7 @@ function widget:DrawWorld()
 
     for group in pairs(groups) do
         local idealSpeed = group.idealSpeed
-        local speed = math.round(group.speed*10)/10
+        local gspeed = math.round(group.speed*10)/10
         glColor(group.color)
 
         for id, unit in pairs(group.units) do
@@ -533,15 +626,25 @@ function widget:DrawWorld()
                     -- Echo("baseSpeed ~= speed is ", idealSpeed ~= speed,idealSpeed, speed)
                     glBillboard()
 
-                    local txt = idealSpeed 
-                    if idealSpeed - speed > 0.1 then
-                        txt = txt .. (' -> %.1f'):format(speed)
-                    end
-                    if unit.nerfedSpeed then
-                        txt = '[' .. ('%.1f'):format(unit.nerfedSpeed) .. ']' .. txt
-                    end
+                    local txt = ''
                     if id == group.leader.id then
-                        txt = '[L] ' .. txt
+                        txt = txt .. '[L] ' 
+                    end
+                    txt = txt .. (' [%.0f g:%.1f]'):format(idealSpeed, gspeed)
+                    if unit.nerfedSpeed then
+                        txt = txt .. (' nerf: %.1f'):format(unit.nerfedSpeed )
+                    end
+                    local moveData = spGetUnitMoveTypeData(id)
+                    local D_maxWantedSpeed = moveData.maxWantedSpeed
+                    local D_wantedSpeed = moveData.wantedSpeed
+                    txt = txt .. (' W: %.1f / %.1f'):format(D_wantedSpeed or 0, D_maxWantedSpeed or 0 )
+            
+                
+
+                    local vx, _, vz, speed3D = spGetUnitVelocity(id)
+                    if vx then
+                        local realSpeed = 30 * (vx^2 + vz^2) ^0.5
+                        txt = txt .. (' real: %.1f 3D: %.1f' ):format(realSpeed, speed3D * 30)
                     end
                     glText(txt, 0,0,25,'h')
                     glPopMatrix()

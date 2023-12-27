@@ -1190,7 +1190,7 @@ function widget:CommandsChanged()
     v.moddedTarget,v.moddedCmd,drawUnit=nil,nil,EMPTY_TABLE
     upd.treatedFrame = false
     local selTypes = WG.selectionDefID or spGetSelectedUnitsSorted()
-    
+    sel = selection or spGetSelectedUnits()
     local customRadius = false
     local noHelperTarget =  true
     jumpers = {}
@@ -1318,7 +1318,9 @@ UpdateSelection = function(sel,newsel)
     local selects, ignore, selByID
     local selByID = shift and ByIDs(sel) or {}
     -- Echo('update selection',os.clock())
-
+    -- for k,v in pairs(selByID) do
+    --     Echo(k,v)
+    -- end
     if s.modCtrl then
         selects = GetVisibleUnits(s.acquiredSelect)
         ignore = shift and s.acquiredSelect -- in the double click, user selected or unselected the pointed unit, we don't take it into account
@@ -1331,10 +1333,11 @@ UpdateSelection = function(sel,newsel)
     -- Echo("s.modCtrl is ", s.modCtrl)
         -- Echo('update sel in selection changed')
     local newselByID = ByIDs(newsel)
-    local unselect = shift and not s.modCtrl
+    local unselect = shift --and not s.modCtrl
     if unselect then
         for id in pairs(selects) do
-            if not selByID[id] and ignore~=id then
+            -- Echo('id',id)
+            if not selByID[id] --[[and ignore~=id--]] then
                 unselect = false
                 break
             end
@@ -2390,6 +2393,8 @@ do --- EzTarget ---
         return closestEnemy, closestMine
     end
 ---------
+
+
     local cacheNoSelect = setmetatable({}, {__mode = 'k'})
     do
         local oldSpGetUnitNoSelect = spGetUnitNoSelect
@@ -2412,7 +2417,9 @@ do --- EzTarget ---
         local mx,my = spGetMouseState()
 
         local center, center2
-        local r = v.customRadius or opt.ezTargetRadius
+        local rSelect = opt.ezTargetRadius
+        local rTarget = v.customRadius or rSelect
+        local rMax = math.max(rSelect, rTarget)
         local th = 1--EZTARGET_THRESHOLD
         drawCircle = {} -- for ops and debug
         points={} -- for debug
@@ -2475,7 +2482,7 @@ do --- EzTarget ---
             cached = {}
             cacheNoSelect[cached] = true
         end
-        for _, id in pairs(spGetUnitsInScreenRectangle(mx - r, my - r, mx + r, my + r))  do
+        for _, id in pairs(spGetUnitsInScreenRectangle(mx - rMax, my - rMax, mx + rMax, my + rMax))  do
             local unit = Units[id]
             if unit then
                 -- local isEnemy, isMine = not spIsUnitAllied(id), spGetUnitTeam(id) == v.myTeamID
@@ -2483,7 +2490,7 @@ do --- EzTarget ---
                 -- local defID = spGetUnitDefID(id)
                 local defID = unit.defID
                 if isEnemy and wantEnemy or isMine and wantMine or wantAllied and isAllied then
-                    local bx,by,bz,x,y,z = unit:GetPos(3,true)
+                    local bx,by,bz,x,y,z = unit:GetPos(1,true)
                     if x then
                         -- local x,y,z = spGetUnitPosition(id)
                         local gy = spGetGroundHeight(x,z)
@@ -2545,34 +2552,38 @@ do --- EzTarget ---
                         local scrDist = ((mx-sx)^2 + (my-sy)^2)^0.5
                         -- str = str .. ', [' .. id .. '] dist: ' .. round(scrDist)
                         -- local nature, pos = spTraceScreenRay(sx,sy,true,true,true,false)
-                        local inRange = scrDist <=r
-                        if  inRange then
+                        local inMaxRange = scrDist <= rMax
+                        if  inMaxRange then
                             if isEnemy and wantEnemy and not ignoreTargetDefID[defID] then
-                                -- if not v.customRadius or scrDist<=v.customRadius then
-                                    if scrDist<mindistEnemy then
-                                        mindistEnemy = scrDist
-                                        closestEnemy = id
+                                if scrDist <= rTarget then
+                                    -- if not v.customRadius or scrDist<=v.customRadius then
+                                        if scrDist<mindistEnemy then
+                                            mindistEnemy = scrDist
+                                            closestEnemy = id
+                                        end
+                                        enemies[id]=defID
+                                        poses[id] = {sx,sy,corrected = corrected}
+                                    -- end
+                                end
+                            elseif scrDist <= rSelect then
+                                if isMine and wantMine and not (spGetUnitNoSelect(id, cached) or spGetUnitTransporter(id) or ignoreSelectDefID[defID]) then
+                                    if scrDist<mindistMine then
+                                        mindistMine = scrDist
+                                        closestMine = id
                                     end
-                                    enemies[id]=defID
+                                    mines[id]=defID
                                     poses[id] = {sx,sy,corrected = corrected}
-                                -- end
-                            elseif isMine and wantMine and not (spGetUnitNoSelect(id, cached) or spGetUnitTransporter(id) or ignoreSelectDefID[defID]) then
-                                if scrDist<mindistMine then
-                                    mindistMine = scrDist
-                                    closestMine = id
+                                    mbd = mbd + 1
+                                    minesByDist[mbd] = id
+                                    -- tinsert(minesByDist,id)
+                                elseif isAllied and wantAllied and EzAlliedDefID[defID] then
+                                    if scrDist<mindistAllied then
+                                        mindistAllied = scrDist
+                                        closestAllied = id
+                                    end
+                                    allied[id]=defID
+                                    poses[id] = {sx,sy,corrected = corrected}
                                 end
-                                mines[id]=defID
-                                poses[id] = {sx,sy,corrected = corrected}
-                                mbd = mbd + 1
-                                minesByDist[mbd] = id
-                                -- tinsert(minesByDist,id)
-                            elseif isAllied and wantAllied and EzAlliedDefID[defID] then
-                                if scrDist<mindistAllied then
-                                    mindistAllied = scrDist
-                                    closestAllied = id
-                                end
-                                allied[id]=defID
-                                poses[id] = {sx,sy,corrected = corrected}
                             end
                         end
                     end
