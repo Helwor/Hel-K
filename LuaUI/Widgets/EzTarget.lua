@@ -2069,6 +2069,8 @@ do --- EzTarget ---
     local orange = {unpack(f.COLORS.orange)}
     local yellow = {unpack(f.COLORS.yellow)}
     local white = {unpack(f.COLORS.white)}
+    local lightblue = unpack({f.COLORS.lightblue})
+
     local cos,sin,pi = math.cos, math.sin, math.pi
     local spGetUnitsInScreenRectangle = Spring.GetUnitsInScreenRectangle
     
@@ -2419,6 +2421,11 @@ do --- EzTarget ---
         local center, center2
         local rSelect = opt.ezTargetRadius
         local rTarget = v.customRadius or rSelect
+        if Cam.relDist < 1750 then
+            local mult = 1750 / Cam.relDist
+            Echo('mult', mult)
+            rSelect, rTarget = rSelect * mult, rTarget * mult
+        end
         local rMax = math.max(rSelect, rTarget)
         local th = 1--EZTARGET_THRESHOLD
         drawCircle = {} -- for ops and debug
@@ -2649,7 +2656,10 @@ do --- EzTarget ---
                 -- local sx,sy = spWorldToScreenCoords(x,y,z)
                 -- drawCircle[id .. 'ground'] = {sx,sy,0,SPOT_RADIUS,darkred,1,false,true,id,true}
             end
-            drawCircle.circleDebug = {mx,my,0,r,white,0.35,false,true,false,true}
+            drawCircle.circleDebugTarget = {mx,my,0,rTarget,white,0.35,false,true,false,true}
+            if rTarget ~= rSelect then
+                drawCircle.circleDebugSelect = {mx,my,0,rSelect,lightblue,0.35,false,true,false,true}
+            end
         end
         ---------
         return closestEnemy, closestMine

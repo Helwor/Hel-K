@@ -5383,7 +5383,7 @@ do
 		  return false
 		end--]]
 		end		
-		if hasCombo and button == 3 and g.hkCombo.force then
+		if hasCombo and button == 3 and g.hkCombo and g.hkCombo.force then
 			changeCommand = 1
 		end
 		return hasCombo

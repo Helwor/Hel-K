@@ -39,7 +39,7 @@ local CMD_MOVE = CMD.MOVE
 local groupByID, groups, poses, updateNow = {}, {}, {}, {}, {}
 
 
-local THRESHOLD = 2 -- minimum diff of slowest speed at which we start caring about updating unit speed
+local THRESHOLD = 3 -- minimum diff of slowest speed at which we start caring about updating unit speed
 local SMOOTH = 0.5 -- maximum speed up change relative to max possible speed between cycle
 local SMOOTH_FLOOR = 15 -- minimum smoothing allowed in absolute value
 
@@ -258,6 +258,7 @@ local function GetLowest2DSpeed(group)
     local naturalLowestSpeed = idealSpeed
     local smoothing = math.max(naturalLowestSpeed * SMOOTH, SMOOTH_FLOOR)
     naturalLowestSpeed = math.min(leader.currentSpeed  + smoothing, naturalLowestSpeed)
+    -- local totalMoveSpeedChange = Spring.GetUnitRulesParam(id,'totalMoveSpeedChange')
 
     local naturalSlowest = leader
     local units = group.units
