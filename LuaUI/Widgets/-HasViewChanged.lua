@@ -1,17 +1,3 @@
--- $Id: gfx_outline.lua 3171 2008-11-06 09:06:29Z det $
---------------------------------------------------------------------------------
---------------------------------------------------------------------------------
---
---  file:    gfx_outline.lua
---  brief:   Displays a nice cartoon like outline around units
---  author:  jK
---
---  Copyright (C) 2007.
---  Licensed under the terms of the GNU GPL, v2 or later.
---
---------------------------------------------------------------------------------
---------------------------------------------------------------------------------
-
 function widget:GetInfo()
 	return {
 		name      = "HasViewChanged",
