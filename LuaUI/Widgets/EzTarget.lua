@@ -2423,7 +2423,7 @@ do --- EzTarget ---
         local rTarget = v.customRadius or rSelect
         if Cam.relDist < 1750 then
             local mult = 1750 / Cam.relDist
-            Echo('mult', mult)
+            -- Echo('mult', mult)
             rSelect, rTarget = rSelect * mult, rTarget * mult
         end
         local rMax = math.max(rSelect, rTarget)
