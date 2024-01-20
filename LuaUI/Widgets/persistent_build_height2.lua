@@ -2955,7 +2955,7 @@ function widget:MousePress(mx, my, button)
         return
     end
     if button == 1 then
-        if not (cons[1] or g.preGame) then
+        if not (cons[1] or g.preGame) or WG.Chili.Screen0:IsAbove(mx,my) then
             return
         end
 

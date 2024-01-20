@@ -3971,6 +3971,9 @@ function widget:MousePress(mx, my, button)
 		widget:Update(0)
 		Echo('didnt have PID, now ?',PID,os.clock())
 	end
+	if button==1 and WG.Chili.Screen0:IsAbove(mx,my) then
+		return
+	end
 	if button==1 and PID then
 		if ctrl and shift then
 		-- use the normal engine building system when ctrl and shift are pressed
