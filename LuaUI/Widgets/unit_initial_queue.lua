@@ -917,7 +917,6 @@ local function CancelQueue()
 	for i=1,#buildQueue do buildQueue[i]=nil end -- Helwor
 
 	Spring.SendLuaUIMsg("IQ|5",'a')
-	Spring.SendLuaUIMsg("IQ|5",'s')
 	mCost, eCost, bCost = GetQueueCosts()
 	buildTime = bCost / sDef.buildSpeed
 end
@@ -980,20 +979,17 @@ local function InitialQueueHandleCommand(cmdID, cmdParams, cmdOptions)
 				InsertInQueue(buildQueue, buildData)
 				local msg = "IQ|4|"..selDefID.."|"..math.modf(bx).."|"..math.modf(by).."|"..math.modf(bz).."|"..buildFacing
 				Spring.SendLuaUIMsg(msg,'a')
-				Spring.SendLuaUIMsg(msg,'s')
 
 				for i=2,#buildQueue do 
 					local buildData = buildQueue[i]
-					local msg = "IQ|3|"..buildData[1].."|"..math.modf(buildData[1]).."|"..math.modf(buildData[2]).."|"..math.modf(buildData[3]).."|"..buildData[4]
+					local msg = "IQ|3|"..buildData[1].."|"..math.modf(buildData[2]).."|"..math.modf(buildData[3]).."|"..math.modf(buildData[4]).."|"..buildData[5]
 					Spring.SendLuaUIMsg(msg,'a')
-					Spring.SendLuaUIMsg(msg,'s')
 				end
 			end
 			if buildQueue[MAX_QUEUE + 1] then	-- exceeded max queue, remove the one at the end
 				table.remove(buildQueue, MAX_QUEUE + 1)
 				local msg = "IQ|2|".. (MAX_QUEUE + 1)
 				Spring.SendLuaUIMsg(msg,'a')
-				Spring.SendLuaUIMsg(msg,'s')
 			end
 		end
 	elseif cmdOptions.shift then	-- shift-queue
@@ -1014,11 +1010,9 @@ local function InitialQueueHandleCommand(cmdID, cmdParams, cmdOptions)
 
 	if msg then
 		Spring.SendLuaUIMsg(msg,'a')
-		Spring.SendLuaUIMsg(msg,'s') --need 2 msg because since Spring 97 LuaUIMsg without parameter is send info to EVERYONE (including enemy)
 	end
 	if msg2 then
 		Spring.SendLuaUIMsg(msg2,'a')
-		Spring.SendLuaUIMsg(msg2,'s')
 	end
 	
 	mCost, eCost, bCost = GetQueueCosts()
