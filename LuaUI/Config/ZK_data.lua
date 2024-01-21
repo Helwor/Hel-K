@@ -1161,7 +1161,7 @@ return {
 			["epic_Combo_Overhead/Free_Camera_(experimental)_invertalt"] = false,
 			["epic_Combo_Overhead/Free_Camera_(experimental)_invertscroll"] = false,
 			["epic_Combo_Overhead/Free_Camera_(experimental)_inverttilt"] = false,
-			["epic_Combo_Overhead/Free_Camera_(experimental)_invertzoom"] = false,
+			["epic_Combo_Overhead/Free_Camera_(experimental)_invertzoom"] = true,
 			["epic_Combo_Overhead/Free_Camera_(experimental)_leftRightEdge"] = "pan",
 			["epic_Combo_Overhead/Free_Camera_(experimental)_maxzoomout"] = 1.31999993,
 			["epic_Combo_Overhead/Free_Camera_(experimental)_maxzoomspeed"] = 5750,
