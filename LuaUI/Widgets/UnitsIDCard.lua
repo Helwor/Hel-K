@@ -8,7 +8,7 @@ function widget:GetInfo()
 		date      = "August 2020",
 		license   = "GNU GPL, v2 or later",
 		layer     = -10e37, -- NOTE: math.huge == 10e38
-		enabled   = false,  --  loaded by default?
+		enabled   = true,  --  loaded by default?
 		handler   = true,
 		api		  = true,
 	}

@@ -9,7 +9,7 @@ function widget:GetInfo()
         date      = "August 2020",
         license   = "GNU GPL, v2 or later",
         layer     = -1000001,
-        enabled   = true,
+        enabled   = false,
         handler   = true
     }
 end
@@ -21,7 +21,7 @@ end
 
 include('keysym.h.lua')
 include("keysym.lua")
--- ADD FIND PAD AND EXCLUDE PAD TO EZ SELECTOR
+
 include("LuaRules/Configs/customcmds.h.lua")
 local customCmds = VFS.Include("LuaRules/Configs/customcmds.lua")
 local KEYSYMS = KEYSYMS

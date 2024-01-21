@@ -34,7 +34,7 @@ local _G = getfenv(widgetHandler.RegisterGlobal)._G
 if not _G then
     return false
 end
-
+VFS.Include("LuaUI/callins.lua", nil, VFS.Game) -- getting CallInsMap
 -------------
 _G.multiOwners = {}
 _G.multiFunc = {}

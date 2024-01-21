@@ -247,8 +247,9 @@ function widget:Initialize()
 		widgetHandler:RemoveWidget(widget)
 		return
 	end
-	Units = WG.UnitsIDCard.active and WG.UnitsIDCard
+	Units = WG.UnitsIDCard and WG.UnitsIDCard.active and WG.UnitsIDCard
 	if not Units then
+		Echo(widget:GetInfo().name .. ' requires UnitsIDCard.')
 		widgetHandler:RemoveWidget(widget)
 		return
 	end
