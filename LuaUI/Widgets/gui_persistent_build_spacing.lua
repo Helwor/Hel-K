@@ -66,7 +66,7 @@ local colors = {  -- red, yellow, green
 -- related to options
 local grdots = "\255\155\155\155" .. " .." .. "\255\255\255\255"
 local requestUpdate
-local wheelSpacing, wheelValue = false, 1
+local wheelSpacing, wheelValue = true, 1
 local showSpacingRects, only2Rects, followGround, stickToWrongGrid, showRectsOnChange
     =      true,          true,        true,          false,             true
 local withBadColor = followGround
