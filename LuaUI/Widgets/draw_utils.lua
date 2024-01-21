@@ -16,7 +16,7 @@ end
 
 local Echo = Spring.Echo
 local debugging = false -- need UtilsFunc.lua
-local showMeExamples = true -- select a unit and push Ctrl + Alt + E to see all examples, push again Ctrl + Alt + E while it blinks to see the updated order
+local showMeExamples = false -- select a unit and push Ctrl + Alt + E to see all examples, push again Ctrl + Alt + E while it blinks to see the updated order
 
 local f = debugging and VFS.Include('LuaUI\\Widgets\\UtilsFunc.lua')
 
@@ -380,10 +380,16 @@ function widget:ViewResize(_vsx, _vsy)
 end
 
 function widget:Initialize()
+    Units = WG.UnitsIDCard and WG.UnitsIDCard.active and WG.UnitsIDCard
+    if not Units then
+        Echo(widget:GetInfo().name .. ' requires UnitsIDCard.')
+        widgetHandler:RemoveWidget(widget)
+        return
+    end
     scale = WG.uiScale
     widget:ViewResize(Spring.GetViewGeometry())
     WG.DrawUtils = DrawUtils
-    Units = WG.UnitsIDCard
+
 end
 
 function widget:Shutdown()
