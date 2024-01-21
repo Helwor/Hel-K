@@ -1425,5 +1425,6 @@ function widget:DrawInMiniMap(minimapX, minimapY)
 	end
 end
 local f = VFS.Include("LuaUI\\Widgets\\UtilsFunc.lua")
-
+f.DebugWidget(widget)
+f = nil
 
