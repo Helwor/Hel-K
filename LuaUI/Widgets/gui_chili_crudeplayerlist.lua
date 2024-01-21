@@ -67,7 +67,7 @@ local PING_TIMEOUT = 2000 -- ms
 local MAX_NAME_LENGTH = 130
 
 local UPDATE_PERIOD = 1
-
+local DEFAULT_TEXT_HEIGHT = 13
 local IMAGE_SHARE  = ":n:" .. LUAUI_DIRNAME .. "Images/playerlist/share.png"
 local IMAGE_CPU    = ":n:" .. LUAUI_DIRNAME .. "Images/playerlist/cpu.png"
 local IMAGE_PING   = ":n:" .. LUAUI_DIRNAME .. "Images/playerlist/ping.png"
@@ -578,19 +578,19 @@ local function GetUserControls(playerID, teamID, allyTeamID, isAiTeam, isDead, i
 
 
 	offset = offset + 15
-	userControls.textAllyTeam = Chili.Label:New {
-		name = "textAllyTeam",
-		x = offset,
-		y = offsetY + 1,
-		right = 0,
-		bottom = 3,
-		-- parent = userControls.mainControl,
-		caption = userControls.entryData.allyTeamID + (isSpec and not isDead and 0 or 1),
-		textColor = userControls.entryData.allyTeamColor,
-		fontsize = options.text_height.value,
-		fontShadow = true,
-		autosize = false,
-	}
+	-- userControls.textAllyTeam = Chili.Label:New {
+	-- 	name = "textAllyTeam",
+	-- 	x = offset,
+	-- 	y = offsetY + 1,
+	-- 	right = 0,
+	-- 	bottom = 3,
+	-- 	-- parent = userControls.mainControl,
+	-- 	caption = userControls.entryData.allyTeamID + (isSpec and not isDead and 0 or 1),
+	-- 	textColor = userControls.entryData.allyTeamColor,
+	-- 	fontsize = options.text_height.value,
+	-- 	fontShadow = true,
+	-- 	autosize = false,
+	-- }
 	userControls.textTeamID = Chili.Label:New {
 		name = "textTeamID",
 		x = offset,
@@ -852,13 +852,17 @@ local function SortEntries()
 	
 	local toTop = options.alignToTop.value
 	local offset = options.text_height.value -5
+	-- if toTop then
+	-- 	header.y = 1
+	-- end
 	local teams = {}
 	for i = 1, #listControls do
 		local control = listControls[i]
 		local userControl = control.mainControl
 		local userData = control.entryData
 		local isPlayer = not userData.isSpec
-		local teamTxt = tonumber(listControls[i].textAllyTeam.caption)
+		-- local teamTxt = tonumber(listControls[i].textAllyTeam.caption)
+		local teamTxt = tonumber(userData.allyTeamID) + (isPlayer and 1 or 0)
 		local thisTeam = teams[teamTxt]
 
 		if not userData.isSpec then
@@ -895,8 +899,13 @@ local function SortEntries()
 		offset = offset + options.text_height.value + 2
 	end
 
-
-
+	if toTop then
+		header._relativeBounds.bottom = false
+		header._relativeBounds.top = 1
+	else
+		header._relativeBounds.top = false
+		header._relativeBounds.bottom = options.text_height.value - header.parent.padding[3] + 1
+	end
 
 	local headerCaption = ''
 	local function coloredString(str,color)
@@ -987,7 +996,7 @@ local function InitializePlayerlist()
 		teamByTeamID = {}
 	end
 	local screenWidth, screenHeight = Spring.GetViewGeometry()
-	local windowWidth = MAX_NAME_LENGTH + 10*(options.text_height.value or 13) + 15
+	local windowWidth = MAX_NAME_LENGTH + 10*(options.text_height.value or 13) + 40
 
 	--// WINDOW
 	scrollPanel = Chili.ScrollPanel:New{
@@ -1014,7 +1023,8 @@ local function InitializePlayerlist()
 	-- local stackPanel = Chili.StackPanel:New{height = 800, width = 800--[[, autoResize = true--]]}
 	header = Chili.Label:New{
 		caption = 'recap',
-
+		bottom = 20,
+		fontsize = options.text_height.value,
 	}
 	playerlistWindow = Chili.Window:New{
 		backgroundColor = {0, 0, 0, 0},
@@ -1090,7 +1100,7 @@ options = {
 	text_height = {
 		name = 'Font Size (10-18)',
 		type = 'number',
-		value = 13,
+		value = DEFAULT_TEXT_HEIGHT,
 		min = 10, max = 18, step = 1,
 		OnChange = InitializePlayerlist,
 		advanced = true
