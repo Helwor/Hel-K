@@ -34,6 +34,8 @@ local trackmode = false --before options
 local thirdperson_trackunit = false
 local overrideTiltValue = false
 local rotateFollowing = false
+-- local mapToScreenFit = 1 + (1.0/5.9) * 3 -- how many time the map can fit in the screen when max zoomed out
+local mapToScreenFit = 1.15  -- default value how many time the map can fit in the screen when max zoomed out
 
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
@@ -571,7 +573,7 @@ Complete Overhead/Free Camera has six actions:
 		name = "Toggle map overview",
 		desc = "Go to overview mode, then restore view to cursor position.",
 		type = 'button',
-		hotkey = {key='tab', mod='ctrl'},
+		hotkey = {key='tab', mod='ctrl+'},
 		OnChange = function(self) Echo('=>') OverviewAction() end,
 		path=miscPath,
 	},
@@ -1032,8 +1034,6 @@ local angleCorrectionMaximum = 5 * RADperDEGREE
 local mapEdgeProportion = 1.0/5.9  --map edge buffer is 1/5.9 of the length of the dimension fitted to screen
 
 local currentFOVhalf_rad = 0
--- local mapToScreenFit = 1 + (1.0/5.9) * 3 -- how many time the map can fit in the screen when max zoomed out
-mapToScreenFit = 1.0 -- how many time the map can fit in the screen when max zoomed out
 
 -- GetDistForBounds = function(width, height, maxGroundHeight, edgeBufferProportion, fov)
 -- 	if not edgeBufferProportion then edgeBufferProportion = mapEdgeProportion end
@@ -1056,7 +1056,6 @@ GetDistForBounds = function(width, height, maxGroundHeight, mult, fov)
 	local edgeBuffer = maxGroundHeight/(2*(45/fov)) -- 
 	local totalFittingLength = (fittingDistance + edgeBuffer)  * mult 
 	-- edgeBuffer = math.max(maxGroundHeight, edgeBuffer)
-
 	return totalFittingLength/math.tan(currentFOVhalf_rad), edgeBuffer
 end
 
@@ -1065,6 +1064,35 @@ local function SetSkyBufferProportion(cs)
 	local _,cs_py,_ = Spring.GetCameraPosition()
 	local topDownBufferZoneBottom = maxDistY - topDownBufferZone
 	WG.COFC_SkyBufferProportion = min(max((cs_py - topDownBufferZoneBottom)/topDownBufferZone + 0.2, 0.0), 1.0) --add 0.2 to start fading little before the straight-down zoomout
+end
+SetFOV = function(fov)
+	local _groundMin, _groundMax = Spring.GetGroundExtremes()
+	local cs = GetTargetCameraState()
+	-- UpdateCam(cs)
+	-- ls_have = false
+	-- SetLockSpot2(cs)
+
+	currentFOVhalf_rad = (fov/2) * RADperDEGREE
+	maxDistY, mapEdgeBuffer = GetDistForBounds(MWIDTH, MHEIGHT, groundMax, mapToScreenFit, fov) --adjust maximum TAB/Overview distance based on camera FOV
+	-- maxDistY, mapEdgeBuffer = GetDistForBounds(MWIDTH, MHEIGHT, groundMax) --adjust maximum TAB/Overview distance based on camera FOV
+	-- Echo("maxDistY is ", maxDistY)
+	cs.fov = fov
+	cs.py = overview_mode and maxDistY or math.min(cs.py, maxDistY)
+
+	--Update Tilt Zoom Constants
+	local tiltzoomfactor = options.tiltzoomfactor.value or 1.0
+	-- topDownBufferZonePercent = 1
+
+	topDownBufferZone = maxDistY * topDownBufferZonePercent
+	
+
+	minZoomTiltAngle = (30 + 17 * math.tan(currentFOVhalf_rad)) * RADperDEGREE * tiltzoomfactor
+
+	if cs.name == "free" then
+		OverrideSetCameraStateInterpolate(cs,options.smoothness.value)
+	else
+	  	spSetCameraState(cs,0)
+	end
 end
 
 do SetFOV(Spring.GetCameraFOV()) end
@@ -1409,7 +1437,7 @@ function SetLockSpot2(cs, x, y, useSmoothMeshSetting) --set an anchor on the gro
 	end
 	ComputeLockSpotParams(cs, gx, gy, gz, onmap)
 end
-
+local SetLockSpot2 = SetLockSpot2
 
 local function UpdateCam(cs)
 	local cstemp = spGetCameraState()
@@ -1442,36 +1470,6 @@ local function UpdateCam(cs)
 	return cstemp
 end
 
-SetFOV = function(fov)
-
-	local _groundMin, _groundMax = Spring.GetGroundExtremes()
-	local cs = GetTargetCameraState()
-	-- UpdateCam(cs)
-	-- ls_have = false
-	-- SetLockSpot2(cs)
-
-	currentFOVhalf_rad = (fov/2) * RADperDEGREE
-	maxDistY, mapEdgeBuffer = GetDistForBounds(MWIDTH, MHEIGHT, groundMax, mapToScreenFit, fov) --adjust maximum TAB/Overview distance based on camera FOV
-	-- maxDistY, mapEdgeBuffer = GetDistForBounds(MWIDTH, MHEIGHT, groundMax) --adjust maximum TAB/Overview distance based on camera FOV
-	-- Echo("maxDistY is ", maxDistY)
-	cs.fov = fov
-	cs.py = overview_mode and maxDistY or math.min(cs.py, maxDistY)
-
-	--Update Tilt Zoom Constants
-	local tiltzoomfactor = options.tiltzoomfactor.value or 1.0
-	-- topDownBufferZonePercent = 1
-
-	topDownBufferZone = maxDistY * topDownBufferZonePercent
-	
-
-	minZoomTiltAngle = (30 + 17 * math.tan(currentFOVhalf_rad)) * RADperDEGREE * tiltzoomfactor
-
-	if cs.name == "free" then
-		OverrideSetCameraStateInterpolate(cs,options.smoothness.value)
-	else
-	  	spSetCameraState(cs,0)
-	end
-end
 
 
 
@@ -1789,7 +1787,6 @@ function Zoom(zoomin, shift, forceCenter, value,ignoreLimit)
 		ls_have = false
 
 	else
-
 		--//ZOOMOUT FROM CENTER-SCREEN, ZOOMIN TO CENTER-SCREEN//--
 		local onmap, gx,gy,gz = VirtTraceRay(cx, cy, cs) --This doesn't seem to provide the exact center, thus later bounding
 
