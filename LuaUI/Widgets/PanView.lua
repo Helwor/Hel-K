@@ -107,7 +107,7 @@ local cfg = { -- default option values
     ,smoothness_zoom = 0.13
     ,smoothness_zoom_back = 0.2
 
-    ,use_origins = true -- wether or not we should recall some v.panning start position
+    ,use_origins = false -- wether or not we should recall some v.panning start position
     ,dir_sensibility = 0.5 -- what max angle variance we accept for stating the mouse go toward an origin point
     ,origin_max = 1 -- maximum last positions we should recall
     ,magnet_to_origin = true -- when zoomed out and auto_zoom_in is true and user release near the original point of view, camera come back to that origin, precisely
