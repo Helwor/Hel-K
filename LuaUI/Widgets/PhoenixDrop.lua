@@ -116,7 +116,7 @@ Process = function()
     end
 end
 
-function widget:KeyPress(key,m, isRepeat) -- note: mods always appear in the order alt,ctrl,shift,meta when iterated  -- we can simulate the same by traversing the table {alt=true,ctrl=true,meta=true,shift=true}
+function widget:KeyPress(key,m, isRepeat) 
     if isRepeat then
         return
     end
