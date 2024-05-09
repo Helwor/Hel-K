@@ -73,8 +73,14 @@ end
 
 local function GetClosestDropLocation(id)
     -- Echo("spGetUnitHeading(id), spGetUnitPosition(id) is ", spGetUnitHeading(id), spGetUnitPosition(id))
-    local vx, vy, vz, v = spGetUnitVelocity(id)
     local bx ,by ,bz = spGetUnitPosition(id)
+    if not bx then
+        return
+    end
+    local vx, vy, vz, v = spGetUnitVelocity(id)
+    if not vx then
+        return
+    end
     if vx < 5 and vz < 5 then -- in case the unit is temporarily slowed down and stunned
         vx, vz = vx*2, vz * 2
     end 
@@ -84,7 +90,7 @@ local function GetClosestDropLocation(id)
 end
 
 local function InsertAttackGround(id, x,y,z)
-    spGiveOrderToUnit(id, CMD_INSERT,{0, CMD_ATTACK, 0, x,y,z},CMD_OPT_ALT)
+    spGiveOrderToUnit(id, CMD_INSERT,{0, CMD_ATTACK, 0, x,y,z}, CMD_OPT_ALT)
 end
 local function RemoveAnyAttack(id)
     spGiveOrderToUnit(id, CMD_REMOVE, CMD_ATTACK, CMD_OPT_ALT)
@@ -101,7 +107,11 @@ Process = function()
             if opt.removeAnyAttack then
                 RemoveAnyAttack(id)
             end
-            InsertAttackGround(id, GetClosestDropLocation(id))
+            local x, y, z = GetClosestDropLocation(id)
+            if not x then
+                return
+            end
+            InsertAttackGround(id, x, y , z)
         end
     end
 end
