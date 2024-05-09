@@ -1,7 +1,7 @@
 function widget:GetInfo()
   return {
     name      = "Phoenix Drop",
-    desc      = "Simulates DGUN/Drop behaviour like it would with a Thunderbird \n (EXPERIMENTAL working using D key)",
+    desc      = "Simulates DGUN/Drop behaviour like it would with a Thunderbird\n(EXPERIMENTAL working using D key)",
     author    = "Helwor",
     date      = "May 2024",
     license   = "GNU GPL, v2 or later",
@@ -140,6 +140,8 @@ function widget:Initialize()
     widget:CommandsChanged()
 end
 
+
+-----------------------------
 
 function widget:SetConfigData(data)
     if dev and data.Debug then
