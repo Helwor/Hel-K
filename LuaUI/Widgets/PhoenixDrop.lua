@@ -11,6 +11,33 @@ function widget:GetInfo()
   }
 end
 
+-------- CONFIG ---------
+-- local PING_LEEWAY = 0.02
+local opt = {
+    removeAnyAttack = true
+}
+
+include('keysym.h.lua')
+local DROP_KEY = KEYSYMS.D
+KEYSYMS = nil
+
+------
+local dev = false
+local f, Debug
+if dev then
+    f =  VFS.Include('LuaUI\\Widgets\\UtilsFunc.lua')
+    option_path = 'Hel-K/'  .. widget:GetInfo().name
+    Debug = { -- default values
+    active = false, -- no debug, no hotkey active without this
+    global = false, -- global is for no key : 'Debug(str)'
+
+    }
+end
+------
+-------------------------
+
+
+
 -- speeds up
 local Echo = Spring.Echo
 
@@ -31,38 +58,10 @@ local CMD_INSERT, CMD_REMOVE = CMD.INSERT, CMD.REMOVE
 local CMD_OPT_ALT, CMD_OPT_SHIFT, CMD_OPT_INTERNAL = CMD.OPT_ALT, CMD.OPT_SHIFT, CMD.OPT_INTERNAL
 local CMD_ATTACK = CMD.ATTACK
 
-
 local EMPTY_TABLE = {}
-
-include('keysym.h.lua')
-local DROP_KEY = KEYSYMS.D
-KEYSYMS = nil
-
--------------
-local dev = false
-local f, Debug
-if dev then
-    f =  VFS.Include('LuaUI\\Widgets\\UtilsFunc.lua')
-    option_path = 'Hel-K/'  .. widget:GetInfo().name
-    Debug = { -- default values
-    active = false, -- no debug, no hotkey active without this
-    global = false, -- global is for no key : 'Debug(str)'
-
-    }
-end
--------------
-
 
 local phoenixDefID = UnitDefNames['bomberriot'].id
 local selectedPhoenixes = false
-
--- CONFIG -- 
--- local PING_LEEWAY = 0.02
-local opt = {
-    removeAnyAttack = true
-}
---
-
 
 local function IsReloaded(id)
     local noammo = spGetUnitRulesParam(id,'noammo')
@@ -94,7 +93,7 @@ local function RemoveAnyAttack(id)
     spGiveOrderToUnit(id, CMD_REMOVE, CMD_ATTACK, CMD_OPT_ALT)
 end
 
-local Process = function()
+local function Process()
     if not selectedPhoenixes then
         return
     end
@@ -127,8 +126,6 @@ end
 function widget:CommandsChanged() 
     selectedPhoenixes = (WG.selectionDefID or spGetSelectedUnitsSorted() or EMPTY_TABLE)[phoenixDefID]
 end
-
-
 
 
 function widget:Initialize()
