@@ -31,6 +31,8 @@ local CMD_INSERT, CMD_OPT_ALT, CMD_OPT_SHIFT, CMD_OPT_INTERNAL = CMD.INSERT, CMD
 local CMD_ATTACK, CMD_REMOVE = CMD.ATTACK, CMD.REMOVE
 
 
+local EMPTY_TABLE = {}
+
 include('keysym.h.lua')
 local DROP_KEY = KEYSYMS.D
 KEYSYMS = nil
@@ -133,24 +135,24 @@ function widget:Initialize()
         widgetHandler:RemoveWidget(self)
         return
     end
-    Debug = f and f.CreateDebug(Debug,widget,options_path)
+    Debug = dev and f.CreateDebug(Debug,widget,options_path)
     widget:CommandsChanged()
 end
 
 
 function widget:SetConfigData(data)
-    if data.Debug then
+    if dev and data.Debug then
         Debug.saved = data.Debug
     end
 end
 
 function widget:GetConfigData()
-    if Debug and Debug.GetSetting then
+    if dev and Debug.GetSetting then
         return {Debug=Debug.GetSetting()}
     end
 end
 function widget:Shutdown()
-    if Debug and Debug.Shutdown then
+    if dev and Debug.Shutdown then
         Debug.Shutdown()
     end
 end
