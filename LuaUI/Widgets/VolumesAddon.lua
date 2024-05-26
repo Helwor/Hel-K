@@ -4,7 +4,7 @@ function widget:GetInfo()
         desc      = "",
         author    = "Helwor",
         version   = "v1",
-        date      = "June 2024",
+        date      = "May 2024",
         license   = "GNU GPL, v2 or later",
         layer     = -10001, 
         enabled   = true,
