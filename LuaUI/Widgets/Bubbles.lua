@@ -109,9 +109,9 @@ local BUBBLE_JUNCTION = 1
 --
 local DRAW_ON_BUBBLE = false
 local ROTATE = true
-local INVERT_DRAWING = true
+local INVERT_DRAWING = false
 --
-local ON_ALL_UNITS = false
+local ON_ALL_UNITS = true
 local BASE_SIZE = 75
 local DRAW_THE_BACK = false
 
@@ -214,7 +214,7 @@ options.bubble_junction = {
 }
 options.hide_units = {
     name ='Hide Units',
-    -- desc = "Doesn't work as spec yet :<",
+    desc = "Doesn't work as spec yet :<",
     type ='bool',
     value = false,
     OnChange = function(self)
