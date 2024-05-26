@@ -114,6 +114,9 @@ local INVERT_DRAWING = false
 local ON_ALL_UNITS = true
 local BASE_SIZE = 75
 local DRAW_THE_BACK = false
+--
+local ALPHA = 0.6
+
 
 local sphereCol = {0,0.2,0.3}
 
@@ -233,6 +236,18 @@ options.on_all_units = {
         ON_ALL_UNITS = self.value
     end,
 }
+
+options.change_alpha = {
+    name = 'Brightness',
+    type = 'number',
+    min = 0.1, step = 0.05, max = 1,
+    value = ALPHA,
+    update_on_the_fly = true,
+    OnChange = function(self)
+        ALPHA = self.value
+        ChangeAlpha(ALPHA)
+    end
+}
 -- for k,v in pairs(Spring) do
 --     if k:lower():find('engine') then
 --         Echo(k,v)
@@ -283,7 +298,7 @@ do
     end
     sphereMat = {
         -- ambient  = {0,0,0}, 
-        diffuse  = { 0, 0, 0, 0.6},
+        diffuse  = { 0, 0, 0, ALPHA},
         emission = { 0.05, 0.10, 0.15 },
         specular = { 0.25, 0.75, 1 },
         shininess = 4
@@ -478,7 +493,7 @@ do
         shininess = 5,
     }
     local myFrontMat = {
-        diffuse  = { 0, 0, 0, 0.65},
+        diffuse  = { 0, 0, 0, math.max(ALPHA - 0.1,0.1)},
         emission = { 0.15, 0.15, 0.15 },
         specular = { 0, 0, 0 },
         shininess = 20,
@@ -692,6 +707,26 @@ do
     lists.mySphereNeg    = gl.CreateList(MySphere, mySphereDivs, mySphereArcs, true)
     lists.mySphereInv       = gl.CreateList(MySphere, mySphereDivs, mySphereArcs, false, true)
     lists.mySphereInvNeg    = gl.CreateList(MySphere, mySphereDivs, mySphereArcs, true, true)
+
+
+    function ChangeAlpha(alpha)
+        -- myFrontMat.diffuse[4] = math.min(alpha-0.1, 0.8)
+        -- Echo("myFrontMat.diffuse[4] is ", myFrontMat.diffuse[4])
+        myFrontMat.diffuse[4] = math.max(alpha-0.1, 0.1)
+        gl.DeleteList(lists.mySphere)
+        gl.DeleteList(lists.mySphereNeg)
+        gl.DeleteList(lists.mySphereInv)
+        gl.DeleteList(lists.mySphereInvNeg)
+
+
+        lists.mySphere       = gl.CreateList(MySphere, mySphereDivs, mySphereArcs, false)
+        lists.mySphereNeg    = gl.CreateList(MySphere, mySphereDivs, mySphereArcs, true)
+        lists.mySphereInv       = gl.CreateList(MySphere, mySphereDivs, mySphereArcs, false, true)
+        lists.mySphereInvNeg    = gl.CreateList(MySphere, mySphereDivs, mySphereArcs, true, true)
+
+
+        sphereMat.diffuse[4] = alpha
+    end
     lists.myWholeSphere  = gl.CreateList(function()-- doesnt look any different
         gl.Culling(GL.FRONT)
         gl.CallList(lists.mySphereNeg)
@@ -865,184 +900,132 @@ function stencilExit() -- reset draw actually
     gl.DepthTest(false)
     gl.DepthMask(false)
 end
-    local function Process(subjects, indexed, verifVisible)
-        -- gl.Utilities.TestStencil()
-        -- gl.Utilities.StartMergingFlat()
-       -----------
-        if not next(subjects) then
-            return
-        end
-        if not unitParams then
-            unitParams = {}
-        end
-        local ROTATE = DRAW_ON_BUBBLE and ROTATE
-        local size = indexed and #subjects
-        local frame = Spring.GetGameFrame() + Spring.GetFrameTimeOffset()
-        local degrees = frame % (360 * 2 * 3 * 5)
-        local delta = math.abs((frame)%50) * 2 -- oscillate between 0 and 50 in 100 frame
-        if indexed then
-        -- gl.CallList(lists.setupSphereDraw)
 
-            for i = size, 1, -1 do
-                local id = subjects[i]
-                if true or PULSE or ROTATE or COLORED then
-                    local params = unitParams[id]
-                    if not params then
-                        params = {}
-                        -- setup definitive params for each unit
-                        math.randomseed(id)
-                        params.maxScale = 0.1 + math.random()/2.5 -- personalized scale mult (pulsing) from 10% to 50% up
-                        params.speed = math.random(60) + 20 -- minimum 
-                        local r,g,b = math.random(), math.random(), math.random()
-                        while r<2/3 and g<2/3 and b<2/3 do
-                            local rand = math.random(3)
-                            if rand == 1 then
-                                r = r + 0.1
-                            elseif rand == 2 then
-                                g = g + 0.1
-                            elseif rand == 3 then
-                                b = b + 0.1
-                            end
-                        end
-                        -- r,g,b = 1,0,0
-                        params.color = {r,g,b}
-                        params.orient = {
-                            math.random()*(math.random(2)==1 and 1 or -1),
-                            math.random()*(math.random(2)==1 and 1 or -1),
-                            math.random()*(math.random(2)==1 and 1 or -1),
-                            math.random()*(math.random(2)==1 and 1 or -1),
-                        }
-                        params.size = UnitDefs[Spring.GetUnitDefID(id) or 1].radius or 50
 
-                        unitParams[id] = params
-                    end
-                    local speed = params.speed
-                    local delta = math.abs(speed - (frame + id*57)%(speed*2))
-                    local mult = 1 + (params.maxScale * (delta) / 100)
-                    params.mult = mult-- gives final scale mult result for the current draw
-                end
-            end
-        else
+
+local function Process(subjects, indexed, verifVisible)
+    -- gl.Utilities.TestStencil()
+    -- gl.Utilities.StartMergingFlat()
+   -----------
+    if not next(subjects) then
+        return
+    end
+    if not unitParams then
+        unitParams = {}
+    end
+    local ROTATE = DRAW_ON_BUBBLE and ROTATE
+    local size = indexed and #subjects
+    local frame = Spring.GetGameFrame() + Spring.GetFrameTimeOffset()
+    local degrees = frame % (360 * 2 * 3 * 5)
+    local delta = math.abs((frame)%50) * 2 -- oscillate between 0 and 50 in 100 frame
+    if indexed then
+    -- gl.CallList(lists.setupSphereDraw)
+
+        for i = size, 1, -1 do
+            local id = subjects[i]
             if true or PULSE or ROTATE or COLORED then
-                for id in pairs(subjects) do
-                    local params = unitParams[id]
-                    if not params then
-                        params = {}
-                        -- setup definitive params for each unit
-                        math.randomseed(id)
-                        params.maxScale = 0.1 + math.random()/2.5 -- personalized scale mult (pulsing) from 10% to 50% up
-                        params.speed = math.random(60) + 20 -- 20 speed minimum
-                        local r,g,b = math.random(), math.random(), math.random()
-                        while r<2/3 and g<2/3 and b<2/3 do
-                            local rand = math.random(3)
-                            if rand == 1 then
-                                r = r + 0.1
-                            elseif rand == 2 then
-                                g = g + 0.1
-                            elseif rand == 3 then
-                                b = b + 0.1
-                            end
+                local params = unitParams[id]
+                if not params then
+                    params = {}
+                    -- setup definitive params for each unit
+                    math.randomseed(id)
+                    params.maxScale = 0.1 + math.random()/2.5 -- personalized scale mult (pulsing) from 10% to 50% up
+                    params.speed = math.random(60) + 20 -- minimum 
+                    local r,g,b = math.random(), math.random(), math.random()
+                    while r<2/3 and g<2/3 and b<2/3 do
+                        local rand = math.random(3)
+                        if rand == 1 then
+                            r = r + 0.1
+                        elseif rand == 2 then
+                            g = g + 0.1
+                        elseif rand == 3 then
+                            b = b + 0.1
                         end
-                        -- r,g,b = 1,0,0
-                        params.color = {r,g,b}
-                        unitParams[id] = params
-                        params.orient = {
-                            math.random()*(math.random(2)==1 and 1 or -1),
-                            math.random()*(math.random(2)==1 and 1 or -1),
-                            math.random()*(math.random(2)==1 and 1 or -1),
-                            math.random()*(math.random(2)==1 and 1 or -1),
-                        }
-                        params.size = UnitDefs[Spring.GetUnitDefID(id) or 1].radius or 50
                     end
-                    local speed = params.speed
-                    local delta = math.abs(speed - (frame + id*57)%(speed*2))
-                    local mult = 1 + (params.maxScale * (delta) / 100)
-                    params.mult = mult-- gives final scale mult result for the current draw
+                    -- r,g,b = 1,0,0
+                    params.color = {r,g,b}
+                    params.orient = {
+                        math.random()*(math.random(2)==1 and 1 or -1),
+                        math.random()*(math.random(2)==1 and 1 or -1),
+                        math.random()*(math.random(2)==1 and 1 or -1),
+                        math.random()*(math.random(2)==1 and 1 or -1),
+                    }
+                    params.size = UnitDefs[Spring.GetUnitDefID(id) or 1].radius or 50
+
+                    unitParams[id] = params
                 end
+                local speed = params.speed
+                local delta = math.abs(speed - (frame + id*57)%(speed*2))
+                local mult = 1 + (params.maxScale * (delta) / 100)
+                params.mult = mult-- gives final scale mult result for the current draw
             end
-
         end
-        -- gl.DepthMask(false)
-        if false and DRAW_THE_BACK then
-            gl.Culling(GL.FRONT)
-            gl.DepthTest(true)
-            -- gl.DepthMask(true)
-            -- gl.Culling(false)
-            -- gl.DepthTest(GL.LESS)
-            gl.DepthTest(GL.LEQUAL)
-            gl.StencilMask(0xff)
-
-            -- gl.StencilTest(true)
-            -- gl.Clear(GL.STENCIL_BUFFER_BIT)
-            -- gl.StencilFunc(GL.ALWAYS, 1, 1)
-            -- gl.StencilOp(GL.KEEP, GL.KEEP, GL.INCR)
-            -- gl.StencilOpSeparate(GL.FRONT, GL.KEEP, GL.KEEP, GL.KEEP)
-            -- gl.StencilOpSeparate(GL.BACK, GL.KEEP, GL.INCR_WRAP, GL.KEEP)
-            -- gl.DepthMask(false) --disable writing to depth buffer
-            -- gl.ColorMask(false,false,false,false) --disable writing to color buffer
-
-            if indexed then
-                for i = size, 1, -1 do
-                    local id = subjects[i]
-                    local params = unitParams[id]
-                    local mult = params.mult
-                    local size = params.size
-                    DrawSphere('simpleSphere',id,size + BASE_SIZE,degrees + id * 57,false,mult, verifVisible)
+    else
+        if true or PULSE or ROTATE or COLORED then
+            for id in pairs(subjects) do
+                local params = unitParams[id]
+                if not params then
+                    params = {}
+                    -- setup definitive params for each unit
+                    math.randomseed(id)
+                    params.maxScale = 0.1 + math.random()/2.5 -- personalized scale mult (pulsing) from 10% to 50% up
+                    params.speed = math.random(60) + 20 -- 20 speed minimum
+                    local r,g,b = math.random(), math.random(), math.random()
+                    while r<2/3 and g<2/3 and b<2/3 do
+                        local rand = math.random(3)
+                        if rand == 1 then
+                            r = r + 0.1
+                        elseif rand == 2 then
+                            g = g + 0.1
+                        elseif rand == 3 then
+                            b = b + 0.1
+                        end
+                    end
+                    -- r,g,b = 1,0,0
+                    params.color = {r,g,b}
+                    unitParams[id] = params
+                    params.orient = {
+                        math.random()*(math.random(2)==1 and 1 or -1),
+                        math.random()*(math.random(2)==1 and 1 or -1),
+                        math.random()*(math.random(2)==1 and 1 or -1),
+                        math.random()*(math.random(2)==1 and 1 or -1),
+                    }
+                    params.size = UnitDefs[Spring.GetUnitDefID(id) or 1].radius or 50
                 end
-            else
-                for id in pairs(subjects) do
-                    local params = unitParams[id]
-                    local mult = PULSE and params.mult
-                    local size = params.size
-
-                    DrawSphere('simpleSphere',id,size + BASE_SIZE,degrees + id * 57,false,mult, verifVisible)
-                end
+                local speed = params.speed
+                local delta = math.abs(speed - (frame + id*57)%(speed*2))
+                local mult = 1 + (params.maxScale * (delta) / 100)
+                params.mult = mult-- gives final scale mult result for the current draw
             end
-
-
-
-
-            gl.Culling(false)
-
-
-            gl.DepthTest(GL.LEQUAL)
-            gl.DepthTest(false)
-            gl.DepthMask(false)
-
-            gl.StencilTest(false)
-            gl.StencilOp(GL.KEEP, GL.KEEP, GL.KEEP)
-            gl.StencilMask(0xff)
-            gl.Clear(GL.STENCIL_BUFFER_BIT)
         end
-        gl.DepthMask(true)
-        gl.ColorMask(false,false,false,false)
+
+    end
+    -- gl.DepthMask(false)
+    if false and DRAW_THE_BACK then
+        gl.Culling(GL.FRONT)
         gl.DepthTest(true)
+        -- gl.DepthMask(true)
+        -- gl.Culling(false)
+        -- gl.DepthTest(GL.LESS)
         gl.DepthTest(GL.LEQUAL)
-        -- StartMergingFlat()
-        
+        gl.StencilMask(0xff)
+
+        -- gl.StencilTest(true)
+        -- gl.Clear(GL.STENCIL_BUFFER_BIT)
+        -- gl.StencilFunc(GL.ALWAYS, 1, 1)
+        -- gl.StencilOp(GL.KEEP, GL.KEEP, GL.INCR)
+        -- gl.StencilOpSeparate(GL.FRONT, GL.KEEP, GL.KEEP, GL.KEEP)
+        -- gl.StencilOpSeparate(GL.BACK, GL.KEEP, GL.INCR_WRAP, GL.KEEP)
+        -- gl.DepthMask(false) --disable writing to depth buffer
+        -- gl.ColorMask(false,false,false,false) --disable writing to color buffer
+
         if indexed then
             for i = size, 1, -1 do
                 local id = subjects[i]
                 local params = unitParams[id]
                 local mult = params.mult
                 local size = params.size
-                -- gl.Culling(GL.FRONT)
-                -- if i == 1 then
-                --     Echo((Spring.GetUnitPosition(id)))
-                -- end
-                -- gl.Color(0.1,0.1,0.3,0.2)
-                -- gl.Color(0.1,0.1,0.3,0.2)
-                -- gl.Culling(GL.FRONT)
                 DrawSphere('simpleSphere',id,size + BASE_SIZE,degrees + id * 57,false,mult, verifVisible)
-                -- gl.DrawFuncAtUnit(id,false,DrawSphereAtUnit,'simpleSphere',id,128,degrees + id * 57,false,PULSE and unitParams[id].mult)
-                -- gl.Culling(false)
-                -- DrawSphere('simpleSphereNeg',id,128,degrees + id * 57,false,unitParams[id].mult)
-
-                -- gl.Culling(GL.BACK)
-                -- gl.Color(1,1,1,0.1)
-                -- DrawSphere('simpleSphereNeg',id,132,degrees + id * 57)
-                -- DrawSphere('cloakSphere',id,128,degrees + id * 57)
-                -- gl.Culling(false)
             end
         else
             for id in pairs(subjects) do
@@ -1053,161 +1036,219 @@ end
                 DrawSphere('simpleSphere',id,size + BASE_SIZE,degrees + id * 57,false,mult, verifVisible)
             end
         end
-        -- EndMergingFlat()
-        -- gl.DepthMask(true)
-        gl.ColorMask(true,true,true,true)
-        gl.DepthMask(false)
-        gl.CallList(lists.setupSphereDraw)
-
-        if indexed then
-            gl.Material({ambient = sphereCol})
-            for i = size, 1, -1 do
-                local id = subjects[i]
-                local params = (true or PULSE or ROTATE or COLORED) and unitParams[id]
-                local mult = PULSE and params.mult
-                local orient = ROTATE and params.orient
-                local degrees = degrees + id * 57
-                local size = params.size
-                -- gl.Culling(GL.BACK)
-                -- gl.DepthTest(true)
-                -- gl.DepthTest(GL.GEQUAL)
-                -- gl.Color(0,0.8,1,0.1)
-                -- gl.Culling(GL.FRONT)
-                -- DrawSphere('mySphereNeg',id,128,degrees + id * 57, true,mult)
-                -- gl.Culling(false)
 
 
-                -- gl.DepthTest(GL.LEQUAL)
-                -- if i == 1 then
-                --     Echo((Spring.GetUnitPosition(id)))
-                -- end
-                -- DrawSphere('simpleSphere',id,130,degrees + id * 57)
-                -- gl.Culling(GL.BACK)
-                -- gl.Color(1,1,1,0.1)
-                -- DrawSphere('simpleSphere',id,128.8,degrees + id * 57)
-                -- DrawSphere('cloakSphere',id,128 + offset,degrees + id * 57)
-                -- DrawSphere('cloakShield',id,128.5,degrees + id * 57)
-                -- gl.Culling(GL.BACK)
-                -- DrawSphere('cloakShield',id,128 + offset,degrees + id * 57)
-                -- gl.Rotate(id * 57,1,1,0)
-                -- gl.Color(0,1,0,1)
-                -- uni
-                -- glUseShader(shaders.test)
-                -- gl.Material({
-                --     diffuse = {1,1,1,1}
-                -- })
-                -- gl.Uniform(unifLoc,unpack(unitParams[id].color))
-                -- gl.Material({ambient = {0.5,0,0}})
-                -- gl.Material({ambient = unitParams[id].color})
-                if COLORED then
-                    gl.Material({ambient = params.color})
-                end
-                gl.Material(sphereMat)   
-                -- Echo("sphereMat.diffuse[4] is ", sphereMat.diffuse[4])
-                DrawSphere('simpleSphere',id,size + BASE_SIZE + BUBBLE_JUNCTION,degrees,false,mult, verifVisible)
-                -- glUseShader(0)
-                if DRAW_ON_BUBBLE then
-                    if INVERT_DRAWING then
-                        DrawSphere('mySphereInv',id,size + BASE_SIZE + BUBBLE_JUNCTION, degrees, orient, mult,verifVisible)
-                    else
-                        DrawSphere('mySphere',id,size + BASE_SIZE + BUBBLE_JUNCTION, degrees, orient, mult, verifVisible)
-                    end
-                end
 
 
-            end
-        else
-            gl.Material({ambient = sphereCol})
-            for id in pairs(subjects) do
-                local params = (true or PULSE or ROTATE or COLORED) and unitParams[id]
-                local mult = PULSE and params.mult
-                local orient = ROTATE and params.orient
-                local degrees = degrees + id * 57
-                local size = params.size
-                if COLORED then
-                    gl.Material({ambient = params.color})
-                end
-                gl.Material(sphereMat)   
-                -- Echo("sphereMat.diffuse[4] is ", sphereMat.diffuse[4])
-                DrawSphere('simpleSphere',id,size + BASE_SIZE + BUBBLE_JUNCTION,degrees,false,mult, verifVisible)
-                -- glUseShader(0)
-                if DRAW_ON_BUBBLE then
-                    if INVERT_DRAWING then
-                        DrawSphere('mySphereInv', id, size + BASE_SIZE + BUBBLE_JUNCTION, degrees, orient, mult, verifVisible)
-                    else
-                        DrawSphere('mySphere', id, size + BASE_SIZE + BUBBLE_JUNCTION, degrees, orient, mult, verifVisible)
-                    end
-                end
-
-
-            end
-        end
-        -- gl.Culling(false)
-        gl.DepthTest(false)
         gl.Culling(false)
-        
-        -- gl.StencilTest(false)
-        stencilExit()
-
-        gl.CallList(lists.resetSphereDraw)
-        gl.Color(1,1,1,1)
-
-        -----------
-        -- gl.Utilities.EndStencil()
-
-        ------------ -- merge flat surface
-            -- gl.Utilities.StartMergingFlat()
-            -- local mx, my = Spring.GetMouseState()
-            -- local _, pos = Spring.TraceScreenRay(mx,my,true,true)
-            -- if pos then
-            --     local x,y,z = pos[1], pos[2], pos[3]
-            --     local r = 100
 
 
+        gl.DepthTest(GL.LEQUAL)
+        gl.DepthTest(false)
+        gl.DepthMask(false)
 
-
-
-
-            --     gl.Color(1,0.5,0,0.2)
-            --     gl.PushMatrix()
-            --     gl.Translate(x, y, z)
-            --     gl.Scale(r, y, r)
-            --     -- DrawMergedFlat(plainCircle)
-            --     gl.CallList(plainCircle)
-            --     gl.Translate(50/r, 0, 0)
-            --     gl.Color(1,0.75,0,0.2)
-            --     gl.CallList(plainCircle)
-            --     gl.Color(1,1,0,0.2)
-            --     gl.Translate(-50/r, 0, -50/r)
-            --     gl.CallList(plainCircle)
-            --     gl.PopMatrix()
-
-            --     gl.Color(1,1,1,1)
-            --     -- gl.Utilities.DrawWorldCircle(x,y,z,r)
-
-
+        gl.StencilTest(false)
+        gl.StencilOp(GL.KEEP, GL.KEEP, GL.KEEP)
+        gl.StencilMask(0xff)
+        gl.Clear(GL.STENCIL_BUFFER_BIT)
+    end
+    gl.DepthMask(true)
+    gl.ColorMask(false,false,false,false)
+    gl.DepthTest(true)
+    gl.DepthTest(GL.LEQUAL)
+    -- StartMergingFlat()
+    
+    if indexed then
+        for i = size, 1, -1 do
+            local id = subjects[i]
+            local params = unitParams[id]
+            local mult = params.mult
+            local size = params.size
+            -- gl.Culling(GL.FRONT)
+            -- if i == 1 then
+            --     Echo((Spring.GetUnitPosition(id)))
             -- end
-        --------------
-        -- gl.Utilities.EndMergingFlat()
-    end
+            -- gl.Color(0.1,0.1,0.3,0.2)
+            -- gl.Color(0.1,0.1,0.3,0.2)
+            -- gl.Culling(GL.FRONT)
+            DrawSphere('simpleSphere',id,size + BASE_SIZE,degrees + id * 57,false,mult, verifVisible)
+            -- gl.DrawFuncAtUnit(id,false,DrawSphereAtUnit,'simpleSphere',id,128,degrees + id * 57,false,PULSE and unitParams[id].mult)
+            -- gl.Culling(false)
+            -- DrawSphere('simpleSphereNeg',id,128,degrees + id * 57,false,unitParams[id].mult)
 
-    function widget:DrawWorld()
-        if not TRY_BUBBLES then
-            return
+            -- gl.Culling(GL.BACK)
+            -- gl.Color(1,1,1,0.1)
+            -- DrawSphere('simpleSphereNeg',id,132,degrees + id * 57)
+            -- DrawSphere('cloakSphere',id,128,degrees + id * 57)
+            -- gl.Culling(false)
         end
-        if ON_ALL_UNITS then
-            local subjects = WG.Cam and WG.Visibles.anyMap
-            if subjects then
-                Process(subjects)
-            else
-                subjects = Spring.GetVisibleUnits( Spring.ALL_UNITS, nil, true)
-                Process(subjects, true)
-            end
-        else
-            local subjects = WG.selection or Spring.GetSelectedUnits()
-            Process(subjects, true, true)
+    else
+        for id in pairs(subjects) do
+            local params = unitParams[id]
+            local mult = PULSE and params.mult
+            local size = params.size
+
+            DrawSphere('simpleSphere',id,size + BASE_SIZE,degrees + id * 57,false,mult, verifVisible)
         end
     end
+    -- EndMergingFlat()
+    -- gl.DepthMask(true)
+    gl.ColorMask(true,true,true,true)
+    gl.DepthMask(false)
+    gl.CallList(lists.setupSphereDraw)
+
+    if indexed then
+        gl.Material({ambient = sphereCol})
+        for i = size, 1, -1 do
+            local id = subjects[i]
+            local params = (true or PULSE or ROTATE or COLORED) and unitParams[id]
+            local mult = PULSE and params.mult
+            local orient = ROTATE and params.orient
+            local degrees = degrees + id * 57
+            local size = params.size
+            -- gl.Culling(GL.BACK)
+            -- gl.DepthTest(true)
+            -- gl.DepthTest(GL.GEQUAL)
+            -- gl.Color(0,0.8,1,0.1)
+            -- gl.Culling(GL.FRONT)
+            -- DrawSphere('mySphereNeg',id,128,degrees + id * 57, true,mult)
+            -- gl.Culling(false)
+
+
+            -- gl.DepthTest(GL.LEQUAL)
+            -- if i == 1 then
+            --     Echo((Spring.GetUnitPosition(id)))
+            -- end
+            -- DrawSphere('simpleSphere',id,130,degrees + id * 57)
+            -- gl.Culling(GL.BACK)
+            -- gl.Color(1,1,1,0.1)
+            -- DrawSphere('simpleSphere',id,128.8,degrees + id * 57)
+            -- DrawSphere('cloakSphere',id,128 + offset,degrees + id * 57)
+            -- DrawSphere('cloakShield',id,128.5,degrees + id * 57)
+            -- gl.Culling(GL.BACK)
+            -- DrawSphere('cloakShield',id,128 + offset,degrees + id * 57)
+            -- gl.Rotate(id * 57,1,1,0)
+            -- gl.Color(0,1,0,1)
+            -- uni
+            -- glUseShader(shaders.test)
+            -- gl.Material({
+            --     diffuse = {1,1,1,1}
+            -- })
+            -- gl.Uniform(unifLoc,unpack(unitParams[id].color))
+            -- gl.Material({ambient = {0.5,0,0}})
+            -- gl.Material({ambient = unitParams[id].color})
+            if COLORED then
+                gl.Material({ambient = params.color})
+            end
+            gl.Material(sphereMat)   
+            -- Echo("sphereMat.diffuse[4] is ", sphereMat.diffuse[4])
+            DrawSphere('simpleSphere',id,size + BASE_SIZE + BUBBLE_JUNCTION,degrees,false,mult, verifVisible)
+            -- glUseShader(0)
+            if DRAW_ON_BUBBLE then
+                -- gl.Blending(GL.SRC_ALPHA, GL.ONE_MINUS_SRC_ALPHA)
+                gl.BlendFuncSeparate(GL.SRC_ALPHA, GL.ONE, GL.ONE_MINUS_SRC_ALPHA, GL.ONE_MINUS_DST_ALPHA)
+                if INVERT_DRAWING then
+                    DrawSphere('mySphereInv',id,size + BASE_SIZE + BUBBLE_JUNCTION, degrees, orient, mult,verifVisible)
+                else
+                    DrawSphere('mySphere',id,size + BASE_SIZE + BUBBLE_JUNCTION, degrees, orient, mult, verifVisible)
+                end
+                gl.BlendFuncSeparate(GL.SRC_ALPHA, GL.ONE, GL.ONE_MINUS_SRC_ALPHA, GL.ONE_MINUS_DST_ALPHA)
+            end
+
+
+        end
+    else
+        gl.Material({ambient = sphereCol})
+        for id in pairs(subjects) do
+            local params = (true or PULSE or ROTATE or COLORED) and unitParams[id]
+            local mult = PULSE and params.mult
+            local orient = ROTATE and params.orient
+            local degrees = degrees + id * 57
+            local size = params.size
+            if COLORED then
+                gl.Material({ambient = params.color})
+            end
+            gl.Material(sphereMat)   
+            -- Echo("sphereMat.diffuse[4] is ", sphereMat.diffuse[4])
+            DrawSphere('simpleSphere',id,size + BASE_SIZE + BUBBLE_JUNCTION,degrees,false,mult, verifVisible)
+            -- glUseShader(0)
+            if DRAW_ON_BUBBLE then
+                if INVERT_DRAWING then
+                    DrawSphere('mySphereInv', id, size + BASE_SIZE + BUBBLE_JUNCTION, degrees, orient, mult, verifVisible)
+                else
+                    DrawSphere('mySphere', id, size + BASE_SIZE + BUBBLE_JUNCTION, degrees, orient, mult, verifVisible)
+                end
+            end
+
+
+        end
+    end
+    -- gl.Culling(false)
+    gl.DepthTest(false)
+    gl.Culling(false)
+    
+    -- gl.StencilTest(false)
+    stencilExit()
+
+    gl.CallList(lists.resetSphereDraw)
+    gl.Color(1,1,1,1)
+
+    -----------
+    -- gl.Utilities.EndStencil()
+
+    ------------ -- merge flat surface
+        -- gl.Utilities.StartMergingFlat()
+        -- local mx, my = Spring.GetMouseState()
+        -- local _, pos = Spring.TraceScreenRay(mx,my,true,true)
+        -- if pos then
+        --     local x,y,z = pos[1], pos[2], pos[3]
+        --     local r = 100
+
+
+
+
+
+
+        --     gl.Color(1,0.5,0,0.2)
+        --     gl.PushMatrix()
+        --     gl.Translate(x, y, z)
+        --     gl.Scale(r, y, r)
+        --     -- DrawMergedFlat(plainCircle)
+        --     gl.CallList(plainCircle)
+        --     gl.Translate(50/r, 0, 0)
+        --     gl.Color(1,0.75,0,0.2)
+        --     gl.CallList(plainCircle)
+        --     gl.Color(1,1,0,0.2)
+        --     gl.Translate(-50/r, 0, -50/r)
+        --     gl.CallList(plainCircle)
+        --     gl.PopMatrix()
+
+        --     gl.Color(1,1,1,1)
+        --     -- gl.Utilities.DrawWorldCircle(x,y,z,r)
+
+
+        -- end
+    --------------
+    -- gl.Utilities.EndMergingFlat()
+end
+
+function widget:DrawWorld()
+    if not TRY_BUBBLES then
+        return
+    end
+    if ON_ALL_UNITS then
+        local subjects = false and WG.Cam and WG.Visibles.anyMap
+        if subjects then
+            Process(subjects)
+        else
+            subjects = Spring.GetVisibleUnits( Spring.ALL_UNITS, BASE_SIZE+50, true)
+            Process(subjects, true)
+        end
+    else
+        local subjects = WG.selection or Spring.GetSelectedUnits()
+        Process(subjects, true, true)
+    end
+end
 
 
 
