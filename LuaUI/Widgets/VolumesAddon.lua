@@ -4,7 +4,7 @@ function widget:GetInfo()
         desc      = "",
         author    = "Helwor",
         version   = "v1",
-        date      = "May 2024",
+        date      = "June 2024",
         license   = "GNU GPL, v2 or later",
         layer     = -10001, 
         enabled   = true,
@@ -111,6 +111,8 @@ local DRAW_ON_BUBBLE = true
 local INVERT_DRAWING = true
 local ON_ALL_UNITS = false
 local BASE_SIZE = 75
+local DRAW_THE_BACK = false
+
 local sphereCol = {0,0.2,0.3}
 
 options = {}
@@ -130,6 +132,15 @@ options.try_bubbles = {
             end
         end
     end,
+}
+options.draw_the_back = {
+    name = 'Draw the back junction',
+    type = 'bool',
+    value = DRAW_THE_BACK,
+    OnChange = function(self)
+        DRAW_THE_BACK = self.value
+    end,
+    children = {'invert_draw','rotate'},
 }
 options.draw_on_bubble = {
     name = 'Drawings on bubble',
@@ -265,7 +276,7 @@ do
     end
     sphereMat = {
         -- ambient  = {0,0,0}, 
-        diffuse  = { 0, 0, 0, 0.7},
+        diffuse  = { 0, 0, 0, 0.6},
         emission = { 0.05, 0.10, 0.15 },
         specular = { 0.25, 0.75, 1 },
         shininess = 4
@@ -341,7 +352,14 @@ do
     
     lists.setupSphereDraw = gl.CreateList(function()
         -- gl.Color(0.1, 0.2, 0.3, 0.3)
-        gl.Blending(GL.SRC_ALPHA, GL.ONE)
+        gl.Blending(GL.SRC_ALPHA, GL.ONE) -- originally for cloaksphere
+        -- gl.Blending(GL.ONE_MINUS_SRC_ALPHA, GL.ONE)
+        -- gl.Blending(GL.SRC_ALPHA, GL.DST_ALPHA) 
+
+        -- gl.Blending(GL.ONE, GL.ONE_MINUS_SRC_ALPHA)
+        -- gl.BlendFuncSeparate(GL.SRC_ALPHA, GL.ONE, GL.ONE, GL.ZERO)
+        gl.BlendFuncSeparate(GL.SRC_ALPHA, GL.ONE, GL.ONE_MINUS_SRC_ALPHA, GL.ONE_MINUS_DST_ALPHA)
+
         gl.DepthTest(GL.LESS)
         gl.Lighting(true)
         gl.ShadeModel(GL.FLAT)
@@ -364,6 +382,7 @@ do
         gl.Lighting(false)
         gl.DepthTest(false)
         gl.Blending(GL.SRC_ALPHA, GL.ONE_MINUS_SRC_ALPHA)
+        gl.BlendFuncSeparate(GL.SRC_ALPHA, GL.ONE_MINUS_SRC_ALPHA, GL.ONE, GL.ZERO)
         gl.Fog(true)
         -- gl.ClipPlane(1, false) -- invisible in water
         gl.Color(1,1,1,1)
@@ -787,6 +806,26 @@ function stencilEnter()
     gl.ColorMask(false,false,false,false) --disable writing to color buffer
 end
 
+-------------------
+ -- note where the bubble touch themselves
+function stencilBackBubbleStart()
+    -- note 
+    gl.Culling(GL.FRONT)
+    gl.StencilTest(true)
+    gl.DepthTest(true)
+    gl.DepthTest(GL.EQUAL)
+    gl.StencilMask(0xff)
+    gl.Clear(GL.STENCIL_BUFFER_BIT)
+    gl.StencilFunc(GL.NEVER, 0, 0xff)
+    gl.StencilOp(GL.INCR_WRAP, GL.KEEP, GL.KEEP)
+    -- gl.StencilOpSeparate(GL.FRONT, GL.KEEP, GL.KEEP, GL.KEEP)
+    -- gl.StencilOpSeparate(GL.BACK, GL.KEEP, GL.INCR_WRAP, GL.KEEP)
+    -- gl.DepthMask(false) --disable writing to depth buffer
+    gl.ColorMask(false,false,false,false) --disable writing to color buffer
+
+end
+
+
 function stencilApply()
     gl.StencilFunc(GL.EQUAL, 0, 0xFF)
     gl.DepthTest(false)
@@ -799,7 +838,7 @@ function stencilApply()
     gl.ColorMask(true,true,true,true)
 end
 
-function stencilExit()
+function stencilExit() -- reset draw actually
     gl.StencilTest(false)
     gl.Culling(false)
     gl.Clear(GL.STENCIL_BUFFER_BIT)
@@ -807,6 +846,8 @@ function stencilExit()
     gl.StencilOp(GL.KEEP, GL.KEEP, GL.KEEP)
     gl.StencilOpSeparate(GL.BACK, GL.KEEP, GL.KEEP, GL.KEEP)
     gl.StencilOpSeparate(GL.FRONT, GL.KEEP, GL.KEEP, GL.KEEP)
+    gl.DepthTest(GL.LEQUAL)
+    gl.DepthTest(false)
     gl.DepthMask(false)
 end
     local function Process(subjects, indexed, verifVisible)
@@ -905,7 +946,57 @@ end
             end
         end
         -- gl.DepthMask(false)
+        if DRAW_THE_BACK then
+            gl.Culling(GL.FRONT)
+            gl.DepthTest(true)
+            -- gl.DepthMask(true)
+            -- gl.Culling(false)
+            -- gl.DepthTest(GL.LESS)
+            gl.DepthTest(GL.LEQUAL)
+            gl.StencilMask(0xff)
 
+            -- gl.StencilTest(true)
+            -- gl.Clear(GL.STENCIL_BUFFER_BIT)
+            -- gl.StencilFunc(GL.ALWAYS, 1, 1)
+            -- gl.StencilOp(GL.KEEP, GL.KEEP, GL.INCR)
+            -- gl.StencilOpSeparate(GL.FRONT, GL.KEEP, GL.KEEP, GL.KEEP)
+            -- gl.StencilOpSeparate(GL.BACK, GL.KEEP, GL.INCR_WRAP, GL.KEEP)
+            -- gl.DepthMask(false) --disable writing to depth buffer
+            -- gl.ColorMask(false,false,false,false) --disable writing to color buffer
+
+            if indexed then
+                for i = size, 1, -1 do
+                    local id = subjects[i]
+                    local params = unitParams[id]
+                    local mult = params.mult
+                    local size = params.size
+                    DrawSphere('simpleSphere',id,size + BASE_SIZE,degrees + id * 57,false,mult, verifVisible)
+                end
+            else
+                for id in pairs(subjects) do
+                    local params = unitParams[id]
+                    local mult = PULSE and params.mult
+                    local size = params.size
+
+                    DrawSphere('simpleSphere',id,size + BASE_SIZE,degrees + id * 57,false,mult, verifVisible)
+                end
+            end
+
+
+
+
+            gl.Culling(false)
+
+
+            gl.DepthTest(GL.LEQUAL)
+            gl.DepthTest(false)
+            gl.DepthMask(false)
+
+            gl.StencilTest(false)
+            gl.StencilOp(GL.KEEP, GL.KEEP, GL.KEEP)
+            gl.StencilMask(0xff)
+            gl.Clear(GL.STENCIL_BUFFER_BIT)
+        end
         gl.DepthMask(true)
         gl.ColorMask(false,false,false,false)
         gl.DepthTest(true)
