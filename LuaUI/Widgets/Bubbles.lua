@@ -1237,7 +1237,7 @@ function widget:DrawWorld()
         return
     end
     if ON_ALL_UNITS then
-        local subjects = false and WG.Cam and WG.Visibles.anyMap
+        local subjects = WG.Cam and WG.Visibles.anyMap
         if subjects then
             Process(subjects)
         else
