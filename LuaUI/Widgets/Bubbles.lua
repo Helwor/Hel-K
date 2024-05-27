@@ -115,10 +115,26 @@ local ON_ALL_UNITS = true
 local BASE_SIZE = 75
 local DRAW_THE_BACK = false
 --
-local ALPHA = 0.6
+local ALPHA = 0.45
+local COLOR_STRENGTH = 2.5
+
+local sphereColBase = {0,0.2,0.3}
+local sphereCol = {sphereColBase[1] * COLOR_STRENGTH, sphereColBase[1] * COLOR_STRENGTH, sphereColBase[1] * COLOR_STRENGTH}
+local unitParams = {}
+local colorMat = {ambient = sphereCol}
 
 
-local sphereCol = {0,0.2,0.3}
+
+function ChangeColorStrength(strength)
+    for _, params in pairs(unitParams) do
+        local base = params.base_color
+        local color = params.color
+        color[1], color[2], color[3] = base[1] * strength, base[3] * strength, base[3] * strength 
+    end
+    sphereCol[1], sphereCol[2], sphereCol[3] = sphereColBase[1] * strength, sphereColBase[2] * strength, sphereColBase[3] * strength
+end
+
+
 
 options = {}
 options_path = 'Hel-K/' .. widget:GetInfo().name
@@ -246,6 +262,17 @@ options.change_alpha = {
     OnChange = function(self)
         ALPHA = self.value
         ChangeAlpha(ALPHA)
+    end
+}
+options.color_strength = {
+    name = 'Color Strength',
+    type = 'number',
+    min = 0.1, step = 0.05, max = 7,
+    value = COLOR_STRENGTH,
+    update_on_the_fly = true,
+    OnChange = function(self)
+        COLOR_STRENGTH = self.value
+        ChangeColorStrength(COLOR_STRENGTH)
     end
 }
 -- for k,v in pairs(Spring) do
@@ -798,7 +825,6 @@ do
         gl.PopMatrix()
 
     end
-
 end
 
 ----------------------------------------------------
@@ -910,9 +936,6 @@ local function Process(subjects, indexed, verifVisible)
     if not next(subjects) then
         return
     end
-    if not unitParams then
-        unitParams = {}
-    end
     local ROTATE = DRAW_ON_BUBBLE and ROTATE
     local size = indexed and #subjects
     local frame = Spring.GetGameFrame() + Spring.GetFrameTimeOffset()
@@ -982,7 +1005,8 @@ local function Process(subjects, indexed, verifVisible)
                         end
                     end
                     -- r,g,b = 1,0,0
-                    params.color = {r,g,b}
+                    params.base_color = {r,g,b}
+                    params.color = {r*COLOR_STRENGTH, g*COLOR_STRENGTH, b*COLOR_STRENGTH}
                     unitParams[id] = params
                     params.orient = {
                         math.random()*(math.random(2)==1 and 1 or -1),
@@ -1138,7 +1162,8 @@ local function Process(subjects, indexed, verifVisible)
             -- gl.Material({ambient = {0.5,0,0}})
             -- gl.Material({ambient = unitParams[id].color})
             if COLORED then
-                gl.Material({ambient = params.color})
+                colorMat.ambient = params.color
+                gl.Material(colorMat)
             end
             gl.Material(sphereMat)   
             -- Echo("sphereMat.diffuse[4] is ", sphereMat.diffuse[4])
@@ -1160,13 +1185,14 @@ local function Process(subjects, indexed, verifVisible)
     else
         gl.Material({ambient = sphereCol})
         for id in pairs(subjects) do
-            local params = (true or PULSE or ROTATE or COLORED) and unitParams[id]
+            local params = unitParams[id]
             local mult = PULSE and params.mult
             local orient = ROTATE and params.orient
             local degrees = degrees + id * 57
             local size = params.size
             if COLORED then
-                gl.Material({ambient = params.color})
+                colorMat.ambient = params.color
+                gl.Material(colorMat)
             end
             gl.Material(sphereMat)   
             -- Echo("sphereMat.diffuse[4] is ", sphereMat.diffuse[4])
