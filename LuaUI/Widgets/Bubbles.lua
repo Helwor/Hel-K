@@ -954,7 +954,42 @@ function stencilExit() -- reset draw actually
     gl.DepthMask(false)
 end
 
-
+local function SetUnitParams(id, frame, degrees, delta)
+    local params = unitParams[id]
+    if not params then
+        params = {}
+        -- setup definitive params for each unit
+        math.randomseed(id)
+        params.maxScale = 0.1 + math.random()/2.5 -- personalized scale mult (pulsing) from 10% to 50% up
+        params.speed = math.random(60) + 20 -- 20 speed minimum
+        local r,g,b = math.random(), math.random(), math.random()
+        while r<2/3 and g<2/3 and b<2/3 do
+            local rand = math.random(3)
+            if rand == 1 then
+                r = r + 0.1
+            elseif rand == 2 then
+                g = g + 0.1
+            elseif rand == 3 then
+                b = b + 0.1
+            end
+        end
+        -- r,g,b = 1,0,0
+        params.base_color = {r,g,b}
+        params.color = {r*COLOR_STRENGTH, g*COLOR_STRENGTH, b*COLOR_STRENGTH}
+        unitParams[id] = params
+        params.orient = {
+            math.random()*(math.random(2)==1 and 1 or -1),
+            math.random()*(math.random(2)==1 and 1 or -1),
+            math.random()*(math.random(2)==1 and 1 or -1),
+            math.random()*(math.random(2)==1 and 1 or -1),
+        }
+        params.size = UnitDefs[Spring.GetUnitDefID(id) or 1].radius or 50
+    end
+    local speed = params.speed
+    local delta = math.abs(speed - (frame + id*57)%(speed*2))
+    local mult = 1 + (params.maxScale * (delta) / 100)
+    params.mult = mult-- gives final scale mult result for the current draw
+end
 
 local function Process(subjects, indexed, verifVisible)
     -- gl.Utilities.TestStencil()
@@ -970,83 +1005,14 @@ local function Process(subjects, indexed, verifVisible)
     local delta = math.abs((frame)%50) * 2 -- oscillate between 0 and 50 in 100 frame
     if indexed then
     -- gl.CallList(lists.setupSphereDraw)
-
         for i = size, 1, -1 do
             local id = subjects[i]
-            if true or PULSE or ROTATE or COLORED then
-                local params = unitParams[id]
-                if not params then
-                    params = {}
-                    -- setup definitive params for each unit
-                    math.randomseed(id)
-                    params.maxScale = 0.1 + math.random()/2.5 -- personalized scale mult (pulsing) from 10% to 50% up
-                    params.speed = math.random(60) + 20 -- minimum 
-                    local r,g,b = math.random(), math.random(), math.random()
-                    while r<2/3 and g<2/3 and b<2/3 do
-                        local rand = math.random(3)
-                        if rand == 1 then
-                            r = r + 0.1
-                        elseif rand == 2 then
-                            g = g + 0.1
-                        elseif rand == 3 then
-                            b = b + 0.1
-                        end
-                    end
-                    -- r,g,b = 1,0,0
-                    params.color = {r,g,b}
-                    params.orient = {
-                        math.random()*(math.random(2)==1 and 1 or -1),
-                        math.random()*(math.random(2)==1 and 1 or -1),
-                        math.random()*(math.random(2)==1 and 1 or -1),
-                        math.random()*(math.random(2)==1 and 1 or -1),
-                    }
-                    params.size = UnitDefs[Spring.GetUnitDefID(id) or 1].radius or 50
-
-                    unitParams[id] = params
-                end
-                local speed = params.speed
-                local delta = math.abs(speed - (frame + id*57)%(speed*2))
-                local mult = 1 + (params.maxScale * (delta) / 100)
-                params.mult = mult-- gives final scale mult result for the current draw
-            end
+            SetUnitParams(id, frame, degrees, delta)
         end
     else
         if true or PULSE or ROTATE or COLORED then
             for id in pairs(subjects) do
-                local params = unitParams[id]
-                if not params then
-                    params = {}
-                    -- setup definitive params for each unit
-                    math.randomseed(id)
-                    params.maxScale = 0.1 + math.random()/2.5 -- personalized scale mult (pulsing) from 10% to 50% up
-                    params.speed = math.random(60) + 20 -- 20 speed minimum
-                    local r,g,b = math.random(), math.random(), math.random()
-                    while r<2/3 and g<2/3 and b<2/3 do
-                        local rand = math.random(3)
-                        if rand == 1 then
-                            r = r + 0.1
-                        elseif rand == 2 then
-                            g = g + 0.1
-                        elseif rand == 3 then
-                            b = b + 0.1
-                        end
-                    end
-                    -- r,g,b = 1,0,0
-                    params.base_color = {r,g,b}
-                    params.color = {r*COLOR_STRENGTH, g*COLOR_STRENGTH, b*COLOR_STRENGTH}
-                    unitParams[id] = params
-                    params.orient = {
-                        math.random()*(math.random(2)==1 and 1 or -1),
-                        math.random()*(math.random(2)==1 and 1 or -1),
-                        math.random()*(math.random(2)==1 and 1 or -1),
-                        math.random()*(math.random(2)==1 and 1 or -1),
-                    }
-                    params.size = UnitDefs[Spring.GetUnitDefID(id) or 1].radius or 50
-                end
-                local speed = params.speed
-                local delta = math.abs(speed - (frame + id*57)%(speed*2))
-                local mult = 1 + (params.maxScale * (delta) / 100)
-                params.mult = mult-- gives final scale mult result for the current draw
+                SetUnitParams(id, frame, degrees, delta)
             end
         end
 
