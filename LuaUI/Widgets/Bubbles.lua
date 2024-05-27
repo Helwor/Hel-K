@@ -1,7 +1,7 @@
 function widget:GetInfo()
     return {
         name      = "Bubbles",
-        desc      = "Draw fancy Bubble around unit",
+        desc      = "Draw fancy Bubble around units",
         author    = "Helwor",
         version   = "v1",
         date      = "June 2024",
@@ -112,7 +112,8 @@ local ROTATE = true
 local INVERT_DRAWING = false
 --
 local ON_ALL_UNITS = true
-local BASE_SIZE = 75
+local BASE_SIZE = 35
+local RADIUS_POW = 1.1
 local DRAW_THE_BACK = false
 --
 local ALPHA = 0.45
@@ -125,7 +126,7 @@ local colorMat = {ambient = sphereCol}
 
 
 
-function ChangeColorStrength(strength)
+local function ChangeColorStrength(strength)
     for _, params in pairs(unitParams) do
         local base = params.base_color
         local color = params.color
@@ -134,7 +135,7 @@ function ChangeColorStrength(strength)
     sphereCol[1], sphereCol[2], sphereCol[3] = sphereColBase[1] * strength, sphereColBase[2] * strength, sphereColBase[3] * strength
 end
 
-function ReshuffleColors()
+local function ReshuffleColors()
     for _, params in pairs(unitParams) do
         local r,g,b = math.random(), math.random(), math.random()
         while r<2/3 and g<2/3 and b<2/3 do
@@ -152,15 +153,19 @@ function ReshuffleColors()
         params.color = {r*COLOR_STRENGTH, g*COLOR_STRENGTH, b*COLOR_STRENGTH}
     end
 end
-
+local function ResetUnitsRadius(pow)
+    for _, params in pairs(unitParams) do
+        params.size = params.radius ^ pow
+    end
+end
 
 options = {}
 options_path = 'Hel-K/' .. widget:GetInfo().name
-options_order = {'try_bubbles','pulse','colored','reshuffle_colors','draw_on_bubble','invert_draw','rotate'} -- the rest of options are inserted after declaration
+options_order = {'try_bubbles','on_all_units','pulse','colored','reshuffle_colors','draw_on_bubble','invert_draw','rotate', 'base_size','radius_pow'} -- the rest of options are inserted after declaration
 options.try_bubbles = {
     name ='Try Bubbles',
     type = 'bool',
-    desc = 'Select some units and move them around to see the result',
+    desc = "Show bubbles around units, that's pretty cool amirite \ncommand /bubbles can work too",
     value = TRY_BUBBLES,
     OnChange = function(self)
         TRY_BUBBLES = self.value
@@ -172,6 +177,24 @@ options.try_bubbles = {
         end
     end,
 }
+
+options.on_all_units = {
+    name ='Set On Units...',
+    type ='radioButton',
+    items = {
+        {key = 'sel', name = '..Selected', noHotkey = true},
+        {key = 'all', name = '..All', noHotkey = true},
+    },
+    value = 'all',
+    OnChange = function(self)
+        ON_ALL_UNITS = self.value == 'all'
+    end,
+}
+
+
+
+
+
 options.draw_the_back = {
     name = 'Draw the back junction',
     desc = 'NOT IMPLEMENTED YET',
@@ -248,6 +271,18 @@ options.base_size = {
     end,
     update_on_the_fly = true,
 }
+options.radius_pow = {
+    name = 'Unit Radius Power',
+    desc = 'How much the radius is demultiplicated',
+    type = 'number',
+    value = RADIUS_POW,
+    min = 0.3, max = 1.5, step = 0.01,
+    OnChange = function(self)
+        RADIUS_POW = self.value
+        ResetUnitsRadius(RADIUS_POW)
+    end,
+    update_on_the_fly = true,
+}
 
 options.bubble_junction = {
     name ='Bubble Junction',
@@ -273,14 +308,6 @@ options.hide_units = {
     end,
 }
 
-options.on_all_units = {
-    name ='Set On All Units',
-    type ='bool',
-    value = ON_ALL_UNITS,
-    OnChange = function(self)
-        ON_ALL_UNITS = self.value
-    end,
-}
 
 options.change_alpha = {
     name = 'Brightness',
@@ -954,7 +981,7 @@ function stencilExit() -- reset draw actually
     gl.DepthMask(false)
 end
 
-local function SetUnitParams(id, frame, degrees, delta)
+local function SetUnitParams(id, frame, delta)
     local params = unitParams[id]
     if not params then
         params = {}
@@ -983,12 +1010,92 @@ local function SetUnitParams(id, frame, degrees, delta)
             math.random()*(math.random(2)==1 and 1 or -1),
             math.random()*(math.random(2)==1 and 1 or -1),
         }
-        params.size = UnitDefs[Spring.GetUnitDefID(id) or 1].radius or 50
+        params.radius = UnitDefs[Spring.GetUnitDefID(id) or 1].radius or 50
+        params.size = params.radius ^ RADIUS_POW
     end
     local speed = params.speed
     local delta = math.abs(speed - (frame + id*57)%(speed*2))
     local mult = 1 + (params.maxScale * (delta) / 100)
     params.mult = mult-- gives final scale mult result for the current draw
+end
+
+local function DrawBubbleFrontMask(id, degrees, verifVisible)
+    local params = unitParams[id]
+    local mult = params.mult
+    local size = params.size
+    -- gl.Culling(GL.FRONT)
+    -- if i == 1 then
+    --     Echo((Spring.GetUnitPosition(id)))
+    -- end
+    -- gl.Color(0.1,0.1,0.3,0.2)
+    -- gl.Color(0.1,0.1,0.3,0.2)
+    -- gl.Culling(GL.FRONT)
+    DrawSphere('simpleSphere',id,size + BASE_SIZE,degrees,false,mult, verifVisible)
+    -- gl.DrawFuncAtUnit(id,false,DrawSphereAtUnit,'simpleSphere',id,128,degrees + id * 57,false,PULSE and unitParams[id].mult)
+    -- gl.Culling(false)
+    -- DrawSphere('simpleSphereNeg',id,128,degrees + id * 57,false,unitParams[id].mult)
+
+    -- gl.Culling(GL.BACK)
+    -- gl.Color(1,1,1,0.1)
+    -- DrawSphere('simpleSphereNeg',id,132,degrees + id * 57)
+    -- DrawSphere('cloakSphere',id,128,degrees + id * 57)
+    -- gl.Culling(false)
+end
+
+local function DrawBubbleFront(id, degrees, verifVisible)
+    local params = unitParams[id]
+    local mult = PULSE and params.mult
+    local orient = ROTATE and params.orient
+    local size = params.size
+    -- gl.Culling(GL.BACK)
+    -- gl.DepthTest(true)
+    -- gl.DepthTest(GL.GEQUAL)
+    -- gl.Color(0,0.8,1,0.1)
+    -- gl.Culling(GL.FRONT)
+    -- DrawSphere('mySphereNeg',id,128,degrees + id * 57, true,mult)
+    -- gl.Culling(false)
+
+
+    -- gl.DepthTest(GL.LEQUAL)
+    -- if i == 1 then
+    --     Echo((Spring.GetUnitPosition(id)))
+    -- end
+    -- DrawSphere('simpleSphere',id,130,degrees + id * 57)
+    -- gl.Culling(GL.BACK)
+    -- gl.Color(1,1,1,0.1)
+    -- DrawSphere('simpleSphere',id,128.8,degrees + id * 57)
+    -- DrawSphere('cloakSphere',id,128 + offset,degrees + id * 57)
+    -- DrawSphere('cloakShield',id,128.5,degrees + id * 57)
+    -- gl.Culling(GL.BACK)
+    -- DrawSphere('cloakShield',id,128 + offset,degrees + id * 57)
+    -- gl.Rotate(id * 57,1,1,0)
+    -- gl.Color(0,1,0,1)
+    -- uni
+    -- glUseShader(shaders.test)
+    -- gl.Material({
+    --     diffuse = {1,1,1,1}
+    -- })
+    -- gl.Uniform(unifLoc,unpack(unitParams[id].color))
+    -- gl.Material({ambient = {0.5,0,0}})
+    -- gl.Material({ambient = unitParams[id].color})
+    if COLORED then
+        colorMat.ambient = params.color
+        gl.Material(colorMat)
+    end
+    gl.Material(sphereMat)   
+    -- Echo("sphereMat.diffuse[4] is ", sphereMat.diffuse[4])
+    DrawSphere('simpleSphere',id,size + BASE_SIZE + BUBBLE_JUNCTION,degrees,false, mult, verifVisible)
+    -- glUseShader(0)
+    if DRAW_ON_BUBBLE then
+        -- gl.Blending(GL.SRC_ALPHA, GL.ONE_MINUS_SRC_ALPHA)
+        gl.BlendFuncSeparate(GL.SRC_ALPHA, GL.ONE, GL.ONE_MINUS_SRC_ALPHA, GL.ONE_MINUS_DST_ALPHA)
+        if INVERT_DRAWING then
+            DrawSphere('mySphereInv',id,size + BASE_SIZE + BUBBLE_JUNCTION, degrees, orient, mult,verifVisible)
+        else
+            DrawSphere('mySphere',id,size + BASE_SIZE + BUBBLE_JUNCTION, degrees, orient, mult, verifVisible)
+        end
+        gl.BlendFuncSeparate(GL.SRC_ALPHA, GL.ONE, GL.ONE_MINUS_SRC_ALPHA, GL.ONE_MINUS_DST_ALPHA)
+    end
 end
 
 local function Process(subjects, indexed, verifVisible)
@@ -1007,13 +1114,11 @@ local function Process(subjects, indexed, verifVisible)
     -- gl.CallList(lists.setupSphereDraw)
         for i = size, 1, -1 do
             local id = subjects[i]
-            SetUnitParams(id, frame, degrees, delta)
+            SetUnitParams(id, frame, delta)
         end
     else
-        if true or PULSE or ROTATE or COLORED then
-            for id in pairs(subjects) do
-                SetUnitParams(id, frame, degrees, delta)
-            end
+        for id in pairs(subjects) do
+            SetUnitParams(id, frame, delta)
         end
 
     end
@@ -1078,34 +1183,11 @@ local function Process(subjects, indexed, verifVisible)
     if indexed then
         for i = size, 1, -1 do
             local id = subjects[i]
-            local params = unitParams[id]
-            local mult = params.mult
-            local size = params.size
-            -- gl.Culling(GL.FRONT)
-            -- if i == 1 then
-            --     Echo((Spring.GetUnitPosition(id)))
-            -- end
-            -- gl.Color(0.1,0.1,0.3,0.2)
-            -- gl.Color(0.1,0.1,0.3,0.2)
-            -- gl.Culling(GL.FRONT)
-            DrawSphere('simpleSphere',id,size + BASE_SIZE,degrees + id * 57,false,mult, verifVisible)
-            -- gl.DrawFuncAtUnit(id,false,DrawSphereAtUnit,'simpleSphere',id,128,degrees + id * 57,false,PULSE and unitParams[id].mult)
-            -- gl.Culling(false)
-            -- DrawSphere('simpleSphereNeg',id,128,degrees + id * 57,false,unitParams[id].mult)
-
-            -- gl.Culling(GL.BACK)
-            -- gl.Color(1,1,1,0.1)
-            -- DrawSphere('simpleSphereNeg',id,132,degrees + id * 57)
-            -- DrawSphere('cloakSphere',id,128,degrees + id * 57)
-            -- gl.Culling(false)
+            DrawBubbleFrontMask(id, degrees + id * 57, verifVisible)
         end
     else
         for id in pairs(subjects) do
-            local params = unitParams[id]
-            local mult = PULSE and params.mult
-            local size = params.size
-
-            DrawSphere('simpleSphere',id,size + BASE_SIZE,degrees + id * 57,false,mult, verifVisible)
+            DrawBubbleFrontMask(id, degrees + id * 57, verifVisible)
         end
     end
     -- EndMergingFlat()
@@ -1114,92 +1196,15 @@ local function Process(subjects, indexed, verifVisible)
     gl.DepthMask(false)
     gl.CallList(lists.setupSphereDraw)
 
+    gl.Material({ambient = sphereCol})
     if indexed then
-        gl.Material({ambient = sphereCol})
         for i = size, 1, -1 do
             local id = subjects[i]
-            local params = unitParams[id]
-            local mult = PULSE and params.mult
-            local orient = ROTATE and params.orient
-            local degrees = degrees + id * 57
-            local size = params.size
-            -- gl.Culling(GL.BACK)
-            -- gl.DepthTest(true)
-            -- gl.DepthTest(GL.GEQUAL)
-            -- gl.Color(0,0.8,1,0.1)
-            -- gl.Culling(GL.FRONT)
-            -- DrawSphere('mySphereNeg',id,128,degrees + id * 57, true,mult)
-            -- gl.Culling(false)
-
-
-            -- gl.DepthTest(GL.LEQUAL)
-            -- if i == 1 then
-            --     Echo((Spring.GetUnitPosition(id)))
-            -- end
-            -- DrawSphere('simpleSphere',id,130,degrees + id * 57)
-            -- gl.Culling(GL.BACK)
-            -- gl.Color(1,1,1,0.1)
-            -- DrawSphere('simpleSphere',id,128.8,degrees + id * 57)
-            -- DrawSphere('cloakSphere',id,128 + offset,degrees + id * 57)
-            -- DrawSphere('cloakShield',id,128.5,degrees + id * 57)
-            -- gl.Culling(GL.BACK)
-            -- DrawSphere('cloakShield',id,128 + offset,degrees + id * 57)
-            -- gl.Rotate(id * 57,1,1,0)
-            -- gl.Color(0,1,0,1)
-            -- uni
-            -- glUseShader(shaders.test)
-            -- gl.Material({
-            --     diffuse = {1,1,1,1}
-            -- })
-            -- gl.Uniform(unifLoc,unpack(unitParams[id].color))
-            -- gl.Material({ambient = {0.5,0,0}})
-            -- gl.Material({ambient = unitParams[id].color})
-            if COLORED then
-                colorMat.ambient = params.color
-                gl.Material(colorMat)
-            end
-            gl.Material(sphereMat)   
-            -- Echo("sphereMat.diffuse[4] is ", sphereMat.diffuse[4])
-            DrawSphere('simpleSphere',id,size + BASE_SIZE + BUBBLE_JUNCTION,degrees,false,mult, verifVisible)
-            -- glUseShader(0)
-            if DRAW_ON_BUBBLE then
-                -- gl.Blending(GL.SRC_ALPHA, GL.ONE_MINUS_SRC_ALPHA)
-                gl.BlendFuncSeparate(GL.SRC_ALPHA, GL.ONE, GL.ONE_MINUS_SRC_ALPHA, GL.ONE_MINUS_DST_ALPHA)
-                if INVERT_DRAWING then
-                    DrawSphere('mySphereInv',id,size + BASE_SIZE + BUBBLE_JUNCTION, degrees, orient, mult,verifVisible)
-                else
-                    DrawSphere('mySphere',id,size + BASE_SIZE + BUBBLE_JUNCTION, degrees, orient, mult, verifVisible)
-                end
-                gl.BlendFuncSeparate(GL.SRC_ALPHA, GL.ONE, GL.ONE_MINUS_SRC_ALPHA, GL.ONE_MINUS_DST_ALPHA)
-            end
-
-
+            DrawBubbleFront(id, degrees + id * 57, verifVisible)
         end
     else
-        gl.Material({ambient = sphereCol})
         for id in pairs(subjects) do
-            local params = unitParams[id]
-            local mult = PULSE and params.mult
-            local orient = ROTATE and params.orient
-            local degrees = degrees + id * 57
-            local size = params.size
-            if COLORED then
-                colorMat.ambient = params.color
-                gl.Material(colorMat)
-            end
-            gl.Material(sphereMat)   
-            -- Echo("sphereMat.diffuse[4] is ", sphereMat.diffuse[4])
-            DrawSphere('simpleSphere',id,size + BASE_SIZE + BUBBLE_JUNCTION,degrees,false,mult, verifVisible)
-            -- glUseShader(0)
-            if DRAW_ON_BUBBLE then
-                if INVERT_DRAWING then
-                    DrawSphere('mySphereInv', id, size + BASE_SIZE + BUBBLE_JUNCTION, degrees, orient, mult, verifVisible)
-                else
-                    DrawSphere('mySphere', id, size + BASE_SIZE + BUBBLE_JUNCTION, degrees, orient, mult, verifVisible)
-                end
-            end
-
-
+            DrawBubbleFront(id, degrees + id * 57, verifVisible)
         end
     end
     -- gl.Culling(false)
@@ -1339,9 +1344,21 @@ end
 --     end
 -- end
 function widget:Initialize()
+widgetHandler.actionHandler:AddAction(
+    widget,
+    'bubbles',
+    function()
+        options.try_bubbles.value = not options.try_bubbles.value
+        Echo("options.try_bubbles.value is ", options.try_bubbles.value)
+        options.try_bubbles:OnChange()
+    end,
+    nil,
+    't'
+)
 end
 
 function widget:Shutdown()
+        widgetHandler.actionHandler:RemoveAction(widget, 'bubbles')
     for _,list in pairs(lists) do
         gl.DeleteList(list)
     end
