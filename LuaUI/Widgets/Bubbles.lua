@@ -813,7 +813,7 @@ do
 
     ---------------------------------------------------
     local spGetUnitViewPosition = Spring.GetUnitViewPosition
-    local spIsSPhereInView = Spring.IsSphereInView
+    local spIsSphereInView = Spring.IsSphereInView
     local glScale = gl.Scale
     local glRotate = gl.Rotate
 
