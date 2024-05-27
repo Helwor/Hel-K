@@ -129,16 +129,34 @@ function ChangeColorStrength(strength)
     for _, params in pairs(unitParams) do
         local base = params.base_color
         local color = params.color
-        color[1], color[2], color[3] = base[1] * strength, base[3] * strength, base[3] * strength 
+        color[1], color[2], color[3] = base[1] * strength, base[2] * strength, base[3] * strength 
     end
     sphereCol[1], sphereCol[2], sphereCol[3] = sphereColBase[1] * strength, sphereColBase[2] * strength, sphereColBase[3] * strength
 end
 
+function ReshuffleColors()
+    for _, params in pairs(unitParams) do
+        local r,g,b = math.random(), math.random(), math.random()
+        while r<2/3 and g<2/3 and b<2/3 do
+            local rand = math.random(3)
+            if rand == 1 then
+                r = r + 0.1
+            elseif rand == 2 then
+                g = g + 0.1
+            elseif rand == 3 then
+                b = b + 0.1
+            end
+        end
+        -- r,g,b = 1,0,0
+        params.base_color = {r,g,b}
+        params.color = {r*COLOR_STRENGTH, g*COLOR_STRENGTH, b*COLOR_STRENGTH}
+    end
+end
 
 
 options = {}
 options_path = 'Hel-K/' .. widget:GetInfo().name
-options_order = {'try_bubbles','draw_on_bubble','invert_draw','rotate'} -- the rest of options are inserted after declaration
+options_order = {'try_bubbles','pulse','colored','reshuffle_colors','draw_on_bubble','invert_draw','rotate'} -- the rest of options are inserted after declaration
 options.try_bubbles = {
     name ='Try Bubbles',
     type = 'bool',
@@ -165,7 +183,7 @@ options.draw_the_back = {
     dev = true,
 }
 options.draw_on_bubble = {
-    name = 'Drawings on bubble',
+    name = 'Drawings on bubble...',
     desc = 'When adding drawing, the junction must be sufficiently big (1+) to not experience some graphic glitch',
     type = 'bool',
     value = DRAW_ON_BUBBLE,
@@ -175,7 +193,7 @@ options.draw_on_bubble = {
     children = {'invert_draw','rotate'},
 }
 options.invert_draw = {
-    name = 'Invert Drawings',
+    name = '..Invert Drawings',
     type = 'bool',
     value = INVERT_DRAWING,
     OnChange = function(self)
@@ -184,21 +202,13 @@ options.invert_draw = {
     parents = {'draw_on_bubble'},
 }
 options.rotate = {
-    name = 'Rotate',
+    name = '..Rotate',
     type = 'bool',
     value = ROTATE,
     OnChange = function(self)
         ROTATE = self.value
     end,
     parents = {'draw_on_bubble'},
-}
-options.colored = {
-    name = 'Colored',
-    type = 'bool',
-    value = COLORED,
-    OnChange = function(self)
-        COLORED = self.value
-    end,
 }
 options.pulse = {
     name = 'Pulse',
@@ -207,6 +217,25 @@ options.pulse = {
     OnChange = function(self)
         PULSE = self.value
     end,
+}
+options.colored = {
+    name = 'Colored',
+    type = 'bool',
+    value = COLORED,
+    OnChange = function(self)
+        COLORED = self.value
+    end,
+    children = {'reshuffle_colors'},
+}
+options.reshuffle_colors = {
+    name = 'Reshuffle Colors',
+    type = 'button',
+    slimButton = true,
+    min = 0.1, step = 0.05, max = 7,
+    OnChange = function(self)
+        ReshuffleColors()
+    end,
+    parents = {"colored"},
 }
 options.base_size = {
     name = 'Size',
@@ -239,7 +268,7 @@ options.hide_units = {
     OnChange = function(self)
         for _,id in pairs(Spring.GetAllUnits()) do
             Spring.SetUnitNoDraw(id,self.value) -- doesnt work while spectating
-            -- Spring.SetUnitEngineDrawMask(id,0) -- doesnt work while spectating
+            -- Spring.SetUnitEngineDrawMask(id,0) -- doesnt work
         end
     end,
 }
@@ -275,28 +304,26 @@ options.color_strength = {
         ChangeColorStrength(COLOR_STRENGTH)
     end
 }
--- for k,v in pairs(Spring) do
---     if k:lower():find('engine') then
---         Echo(k,v)
---     end
--- end
-local main_children = {} 
-for k,v in pairs(options) do
-    if k~='try_bubbles' then
-        if k~='rotate' and k~='invert_draw' then
-            if v.parents then
-                table.insert(v.parents, 'try_bubbles')
-            else
-                v.parents = {'try_bubbles'}
-            end
-            if k ~= 'draw_on_bubble' then
-            end
 
+local main_children = {} 
+local intable = function(t,value)
+    for _,v in pairs(t) do
+        if v == value then
+            return true
         end
-        if k ~= 'draw_on_bubble' then
-            table.insert(options_order,k)
+    end
+    return false
+end
+for key,opt in pairs(options) do
+
+    if key~='try_bubbles' then
+        if not opt.parents then
+            opt.parents = {'try_bubbles'}
         end
-        table.insert(main_children, k)
+        table.insert(main_children, key)
+    end
+    if not intable(options_order,key) then
+        table.insert(options_order,key)
     end
 end
 options.try_bubbles.children = main_children
@@ -1125,7 +1152,7 @@ local function Process(subjects, indexed, verifVisible)
         gl.Material({ambient = sphereCol})
         for i = size, 1, -1 do
             local id = subjects[i]
-            local params = (true or PULSE or ROTATE or COLORED) and unitParams[id]
+            local params = unitParams[id]
             local mult = PULSE and params.mult
             local orient = ROTATE and params.orient
             local degrees = degrees + id * 57
