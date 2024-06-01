@@ -6,7 +6,6 @@ function widget:GetInfo()
 		date      = "Oct 2023",
 		license   = "GNU GPL, v2 or v3",
 		layer     = -10, -- Before NoDuplicateOrders
-		-- layer     = -math.huge, -- Before NoDuplicateOrders
 		enabled   = true
 	}
 end
