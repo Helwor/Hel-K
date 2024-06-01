@@ -7,6 +7,7 @@ function widget:GetInfo()
 		date      = "Oct 2023",
 		license   = "GNU GPL, v2 or v3",
 		layer     = -10, -- Before NoDuplicateOrders
+		-- layer     = -math.huge, -- Before NoDuplicateOrders
 		enabled   = true
 	}
 end
@@ -45,19 +46,22 @@ function widget:CommandNotify(cmd, params, opts)
 	if not sel[1] then
 		return
 	end
+
 	local ids, cnt = {}, 0
 	local len = #sel
 	local shift = opts.shift
+	local commandBlocked
+
 	for i = 1, len do
 		local id = sel[i]
 		if IsWaiting(id, shift) then
 			cnt = cnt + 1
-			ids[cnt] = ids
-			spGiveOrderToUnit(id, CMD_WAIT, EMPTY_TABLE, shift and CMD_OPT_SHIFT or 0)
+			ids[cnt] = id
 		end
 	end
+	
 	if cnt > 0 and cnt < len then
-		spGiveOrderToUnitArray(ids,{CMD_WAIT, EMPTY_TABLE, shift and CMD_OPT_SHIFT or 0)})
+		spGiveOrderToUnitArray(ids, CMD_WAIT, EMPTY_TABLE, shift and CMD_OPT_SHIFT or 0)
 		return true
 	end
 end
