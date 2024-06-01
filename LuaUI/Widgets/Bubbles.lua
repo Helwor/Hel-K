@@ -53,7 +53,9 @@ lists.hollowCircle = hollowCircle
 -- end
 -- Echo("shapeHeight is ", shapeHeight,'averageGroundHeight is',averageGroundHeight)
 
-
+if not gl.Utilities then
+    gl.Utilities = {}
+end
 
 function gl.Utilities.DrawFlatHollowCircle(x,y,z,r)
     if not hollowCircle then
@@ -105,15 +107,15 @@ local DrawSphere, sphereMat
 local TRY_BUBBLES = false
 local PULSE = true
 local COLORED = true
-local BUBBLE_JUNCTION = 1
+local BUBBLE_JUNCTION = 2
 --
 local DRAW_ON_BUBBLE = false
 local ROTATE = true
 local INVERT_DRAWING = false
 --
 local ON_ALL_UNITS = true
-local BASE_SIZE = 35
-local RADIUS_POW = 1.1
+local BASE_SIZE = 50
+local RADIUS_POW = 1.07
 local DRAW_THE_BACK = false
 --
 local ALPHA = 0.45
@@ -288,7 +290,7 @@ options.bubble_junction = {
     name ='Bubble Junction',
     desc = 'When adding drawing, the junction must be sufficiently big (1+) to not experience some graphic glitch',
     type ='number',
-    min = 0.1, max = 10, step = 0.1,
+    min = 0.5, max = 10, step = 0.1,
     value = BUBBLE_JUNCTION,
     update_on_the_fly = true,
     OnChange = function(self)
