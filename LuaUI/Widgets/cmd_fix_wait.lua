@@ -1,4 +1,3 @@
-
 function widget:GetInfo()
 	return {
 		name      = "Fix Wait",
@@ -14,7 +13,7 @@ end
 
 
 local spGetSelectedUnits 		= Spring.GetSelectedUnits
--- local spGiveOrderToUnit			= Spring.GiveOrderToUnit
+local spGiveOrderToUnit			= Spring.GiveOrderToUnit
 local spGiveOrderToUnitArray    = Spring.GiveOrderToUnitArray
 local spGetUnitCurrentCommand 	= Spring.GetUnitCurrentCommand
 local spGetCommandQueue			= Spring.GetCommandQueue
@@ -59,9 +58,14 @@ function widget:CommandNotify(cmd, params, opts)
 			ids[cnt] = id
 		end
 	end
-	
+
 	if cnt > 0 and cnt < len then
-		spGiveOrderToUnitArray(ids, CMD_WAIT, EMPTY_TABLE, shift and CMD_OPT_SHIFT or 0)
+		-- giving order one by one is smooth and doesnt take more time or very barely
+		for i=1, cnt do
+			spGiveOrderToUnit(ids[i], CMD_WAIT, EMPTY_TABLE, shift and CMD_OPT_SHIFT or 0)
+		end
+		-- provoke freeze on big number
+		-- spGiveOrderToUnitArray(ids, CMD_WAIT, EMPTY_TABLE, shift and CMD_OPT_SHIFT or 0)
 		return true
 	end
 end
