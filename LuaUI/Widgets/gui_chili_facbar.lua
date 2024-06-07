@@ -557,12 +557,12 @@ RecreateFacbar = function()
 		local progress
 
 		-- building?
-		unitBuildID      = GetUnitIsBuilding(facInfo.unitID)
+		--[[unitBuildID      = GetUnitIsBuilding(facInfo.unitID)
 		if unitBuildID then
 			unitBuildDefID = GetUnitDefID(unitBuildID)
 			_, _, _, _, progress = GetUnitHealth(unitBuildID)
 			unitDefID      = unitBuildDefID
-		elseif (unfinished_facs[facInfo.unitID]) then
+		else--]]if (unfinished_facs[facInfo.unitID]) then
 			_, _, _, _, progress = GetUnitHealth(facInfo.unitID)
 			if (progress>=1) then
 				progress = -1
