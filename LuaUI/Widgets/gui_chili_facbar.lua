@@ -17,6 +17,7 @@ end
 local Echo = Spring.Echo
 include("Widgets/COFCTools/ExportUtilities.lua")
 VFS.Include("LuaRules/Configs/customcmds.h.lua")
+local GetLeftRightAllyTeamIDs = VFS.Include("LuaUI/Headers/allyteam_selection_utilities.lua")
 local f = WG.utilFuncs
 -------------------------------------------------------------------------------
 -------------------------------------------------------------------------------
@@ -164,6 +165,8 @@ local leftTweak, enteredTweak = false, false
 local cycle_half_s = 1
 local cycle_2_s = 1
 local SPECMODE_1V1 = nil 
+local allyTeamSide
+
 -------------------------------------------------------------------------------
 -- SOUNDS
 -------------------------------------------------------------------------------
@@ -327,6 +330,7 @@ end
 local function AddFacButton(unitID, unitDefID, tocontrol, stackname)
 	tocontrol:AddChild(
 		Button:New{
+			caption = '',
 			width = options.buttonsize.value*1.2,
 			height = options.buttonsize.value*1.0,
 			tooltip =       WG.Translate("interface", "lmb") .. ' - ' .. GreenStr .. WG.Translate("interface", "select") .. '\n'
@@ -566,7 +570,7 @@ RecreateFacbar = function()
 			end
 		end
 		local stack_main = stack_main
-		if SPECMODE_1V1~=nil and facInfo.allyTeamID == 1 then
+		if SPECMODE_1V1~=nil and facInfo.allyTeamID == allyTeamSide[2] then
 			stack_main = stack_main2
 		end
 		local facStack, boStack, qStack, qStore = AddFacButton(facInfo.unitID, unitDefID, stack_main, i)
@@ -844,7 +848,7 @@ function widget:Initialize()
 		local teams = Spring.GetTeamList()
 		if teams[3] and not teams[4] then
 			-- local roster = Spring.GetPlayerRoster()
-			-- for i,t in pairs(t) do
+			-- for i,t in pairs(roster) do
 			--  Echo('----',i,t)
 			--  for k,v in pairs(t) do
 			--    Echo(k,v)
@@ -960,7 +964,7 @@ function widget:Initialize()
 		}
 	end
 	myAllyTeamID = Spring.GetMyAllyTeamID()
-
+	allyTeamSide = GetLeftRightAllyTeamIDs()
 	UpdateFactoryList()
 
 end
