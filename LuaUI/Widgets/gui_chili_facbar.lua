@@ -773,7 +773,6 @@ function widget:PlayerChanged(playerID)
 end
 
 function widget:Update()
-	initialized = true
 	inTweak = widgetHandler.tweakMode
 	
 	cycle_half_s = (cycle_half_s % 16) + 1
@@ -1042,7 +1041,6 @@ function widget:Initialize()
 		winx, winy, win2x, win2y = math.round(winx), math.round(winy), math.round(win2x), math.round(win2y) -- if not rounded the controls are blurry
 		window_facbar, stack_main, title = CreateWin(winx, winy, 1, LEFT.tooltip)
 		window_facbar2, stack_main2, title2 = CreateWin(win2x, win2y, 2, RIGHT.tooltip)
-
 	else
 		winx, winy = 0, '30%'
 		window_facbar, stack_main, title = CreateWin(winx, winy, '')
