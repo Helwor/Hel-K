@@ -18,6 +18,7 @@ local Echo = Spring.Echo
 include("Widgets/COFCTools/ExportUtilities.lua")
 VFS.Include("LuaRules/Configs/customcmds.h.lua")
 local GetLeftRightAllyTeamIDs = VFS.Include("LuaUI/Headers/allyteam_selection_utilities.lua")
+local UnitDefs = UnitDefs
 local f = WG.utilFuncs
 -------------------------------------------------------------------------------
 -------------------------------------------------------------------------------
@@ -160,6 +161,7 @@ local waypointMode = 0   -- 0 = off; 1=lazy; 2=greedy (greedy means: you have to
 
 local myPlayerID = Spring.GetMyPlayerID()
 local myAllyTeamID = Spring.GetMyAllyTeamID()
+local myTeamID = Spring.GetMyTeamID()
 local inTweak  = false
 local leftTweak, enteredTweak = false, false
 local cycle_half_s = 1
@@ -206,10 +208,17 @@ local push        = table.insert
 
 
 -------------------------------------------------------------------------------
-local facDefIDArray = {}
+local facDefID, facDefIDArray = {}, {}
 for defID, def in pairs(UnitDefs) do
-	if def.isFactory then
+	if def.isFactory  and def.buildOptions then
 		table.insert(facDefIDArray, defID)
+		facDefID[defID] = true
+	else
+		local cp = def.customParams
+		if (cp.child_of_factory) and def.buildOptions then
+			table.insert(facDefIDArray, defID)
+			facDefID[defID] = true
+		end
 	end
 end
 
@@ -245,14 +254,14 @@ local function UpdateFac(i, facInfo)
 		unitBuildDefID = GetUnitDefID(unitBuildID)
 		_, _, _, _, progress = GetUnitHealth(unitBuildID)
 		--unitDefID      = unitBuildDefID
-		--[[
+		
 	elseif (unfinished_facs[facInfo.unitID]) then
 		_, _, _, _, progress = GetUnitHealth(facInfo.unitID)
 		if (progress>=1) then
 			progress = -1
 			unfinished_facs[facInfo.unitID] = nil
 		end
-		--]]
+		
 	end
 
 	local buildList   = facInfo.buildList
@@ -325,6 +334,9 @@ local function UpdateFacQ(i, facInfo)
 	end
 end
 
+local tooltipButton = WG.Translate("interface", "lmb") .. ' - ' .. GreenStr .. WG.Translate("interface", "select") .. '\n'
+	.. WhiteStr ..  WG.Translate("interface", "mmb") .. ' - ' .. GreenStr .. WG.Translate("interface", "go_to") .. '\n'
+	.. WhiteStr ..  WG.Translate("interface", "rmb") .. ' - ' .. GreenStr .. WG.Translate("interface", "quick_rallypoint_mode")
 
 
 local function AddFacButton(unitID, unitDefID, tocontrol, stackname)
@@ -333,9 +345,7 @@ local function AddFacButton(unitID, unitDefID, tocontrol, stackname)
 			caption = '',
 			width = options.buttonsize.value*1.2,
 			height = options.buttonsize.value*1.0,
-			tooltip =       WG.Translate("interface", "lmb") .. ' - ' .. GreenStr .. WG.Translate("interface", "select") .. '\n'
-				.. WhiteStr ..  WG.Translate("interface", "mmb") .. ' - ' .. GreenStr .. WG.Translate("interface", "go_to") .. '\n'
-				.. WhiteStr ..  WG.Translate("interface", "rmb") .. ' - ' .. GreenStr .. WG.Translate("interface", "quick_rallypoint_mode")
+			tooltip = tooltipButton
 				,
 			backgroundColor = buttonColor,
 			
@@ -569,9 +579,11 @@ RecreateFacbar = function()
 				unfinished_facs[facInfo.unitID] = nil
 			end
 		end
+		Echo("facInfo.allyTeamID is ", facInfo.allyTeamID)
 		local stack_main = stack_main
 		if SPECMODE_1V1~=nil and facInfo.allyTeamID == allyTeamSide[2] then
 			stack_main = stack_main2
+			Echo('ok put to stack 2')
 		end
 		local facStack, boStack, qStack, qStore = AddFacButton(facInfo.unitID, unitDefID, stack_main, i)
 		facs[i].facStack  = facStack
@@ -599,23 +611,27 @@ end
 
 local function ListFactoryTeam(teamID)
 
-
+	Echo('list factory',teamID,'myTeamID',myTeamID,'myAllyTeamID', myAllyTeamID)
 	local teamUnits = Spring.GetTeamUnitsByDefs(teamID, facDefIDArray)
 	local totalUnits = #teamUnits
-
+	local allyTeamID
 	for num = 1, totalUnits do
-	local unitID = teamUnits[num]
-	local unitDefID = GetUnitDefID(unitID)
-	if UnitDefs[unitDefID].isFactory then
-		local bo =  UnitDefs[unitDefID] and UnitDefs[unitDefID].buildOptions
-		if bo and bo[1] then
-			push(facs,{ unitID=unitID, unitDefID=unitDefID, allyTeamID = Spring.GetUnitAllyTeam(unitID), buildList=UnitDefs[unitDefID].buildOptions })
-			local _, _, _, _, buildProgress = GetUnitHealth(unitID)
-			if (buildProgress)and(buildProgress<1) then
-			unfinished_facs[unitID] = true
+		local unitID = teamUnits[num]
+		local unitDefID = GetUnitDefID(unitID)
+		if facDefID[unitDefID] then
+			local bo =  UnitDefs[unitDefID].buildOptions
+			if bo and bo[1] then
+				if not allyTeamID then
+					allyTeamID = Spring.GetUnitAllyTeam(unitID)
+				end
+				push(facs,{ unitID=unitID, unitDefID=unitDefID, allyTeamID = allyTeamID, buildList=bo })
+				Echo('Unit allyTeamID',Spring.GetUnitAllyTeam(unitID),'sides',unpack(allyTeamSide))
+				local _, _, _, _, buildProgress = GetUnitHealth(unitID)
+				if (buildProgress)and(buildProgress<1) then
+					unfinished_facs[unitID] = true
+				end
 			end
 		end
-	end
 	end
 end
 
@@ -625,7 +641,7 @@ local function UpdateFactoryList()
 		ListFactoryTeam(0)
 		ListFactoryTeam(1)
 	else
-		ListFactoryTeam(myAllyTeamID)
+		ListFactoryTeam(myTeamID)
 	end
 	RecreateFacbar()
 end
@@ -644,17 +660,17 @@ function widget:DrawWorld()
 end
 
 function widget:UnitCreated(unitID, unitDefID, unitTeam)
-	if (unitTeam ~= myAllyTeamID and not SPECMODE_1V1) then
-	return
+	if (unitTeam ~= myTeamID and not SPECMODE_1V1) then
+		return
 	end
-
-	if UnitDefs[unitDefID].isFactory then
-	local bo =  UnitDefs[unitDefID] and UnitDefs[unitDefID].buildOptions
+	if not facDefID[unitDefID] then
+		return
+	end
+	local bo =  UnitDefs[unitDefID].buildOptions
 	if bo and bo[1] then
 		push(facs,{ unitID=unitID, unitDefID=unitDefID, allyTeamID = Spring.GetUnitAllyTeam(unitID), buildList=UnitDefs[unitDefID].buildOptions })
 		--UpdateFactoryList()
 		RecreateFacbar()
-	end
 	end
 	unfinished_facs[unitID] = true
 end
@@ -664,20 +680,21 @@ function widget:UnitGiven(unitID, unitDefID, unitTeam, oldTeam)
 end
 
 function widget:UnitDestroyed(unitID, unitDefID, unitTeam)
-	if (unitTeam ~= myAllyTeamID and not SPECMODE_1V1) then
-	return
+	if (unitTeam ~= myTeamID and not SPECMODE_1V1) then
+		return
 	end
-	if UnitDefs[unitDefID].isFactory then
+	if not facDefID[unitDefID] then
+		return
+	end
 	for i,facInfo in ipairs(facs) do
 		if unitID==facInfo.unitID then
-		
-		table.remove(facs,i)
-		unfinished_facs[unitID] = nil
-		--UpdateFactoryList()
-		RecreateFacbar()
-		return
+			
+			table.remove(facs,i)
+			unfinished_facs[unitID] = nil
+			--UpdateFactoryList()
+			RecreateFacbar()
+			return
 		end
-	end
 	end
 end
 
@@ -691,6 +708,7 @@ function widget:PlayerChanged(playerID)
 		return
 	end
 	local myNewAllyTeamID = Spring.GetMyAllyTeamID()
+	local myNewTeamID = Spring.GetMyTeamID()
 	-- Echo("myAllyTeamID is ", myAllyTeamID)
 	if SPECMODE_1V1 ~= nil then
 		
@@ -702,10 +720,11 @@ function widget:PlayerChanged(playerID)
 					UpdateFactoryList()
 					force_update = false
 				else
-					ListFactoryTeam(myAllyTeamID == 0 and 1 or 0)
+					ListFactoryTeam(myTeamID == 0 and 1 or 0)
 					RecreateFacbar()
 				end
 				myAllyTeamID = myNewAllyTeamID
+				myTeamID = myNewTeamID
 				SPECMODE_1V1 = true
 				return
 			else
@@ -720,6 +739,8 @@ function widget:PlayerChanged(playerID)
 		else
 			if fullread then
 				myAllyTeamID = myNewAllyTeamID
+				myTeamID = myNewTeamID
+
 				if force_update then
 					UpdateFactoryList()
 					force_update = false
@@ -730,6 +751,8 @@ function widget:PlayerChanged(playerID)
 		end
 	end
 	myAllyTeamID = myNewAllyTeamID
+	myTeamID = myNewTeamID
+
 	UpdateFactoryList()
 end
 
@@ -837,47 +860,11 @@ function widget:MousePress(x, y, button)
 	return false
 end
 
-function widget:Initialize()
-	if (not WG.Chili) then
-		widgetHandler:RemoveWidget(widget)
-		return
-	end
-	myAllyTeamID = Spring.GetMyAllyTeamID()
-	local spectating, fullread = Spring.GetSpectatingState()
-	if spectating then
-		local teams = Spring.GetTeamList()
-		if teams[3] and not teams[4] then
-			-- local roster = Spring.GetPlayerRoster()
-			-- for i,t in pairs(roster) do
-			--  Echo('----',i,t)
-			--  for k,v in pairs(t) do
-			--    Echo(k,v)
-			--  end
-			-- end
-			SPECMODE_1V1 = fullread
-		end
-	end
-	self:ViewResize(widgetHandler:GetViewSizes())
+local function CreateWin(winx, winy, i)
 	-- setup Chili
-	Chili = WG.Chili
-	Button = Chili.Button
-	Label = Chili.Label
-	Window = Chili.Window
-	StackPanel = Chili.StackPanel
-	Grid = Chili.Grid
-	TextBox = Chili.TextBox
-	Image = Chili.Image
-	Progressbar = Chili.Progressbar
-	screen0 = Chili.Screen0
-
-	-- local winx, winy, win2x, win2y
-	if SPECMODE_1V1 ~= nil then
-		winx, winy, win2x, win2y = vsx * 1/10, vsy * 1/9, vsx * (1/2 + 1/20), vsy * 1/9
-		winx, winy, win2x, win2y = math.round(winx), math.round(winy), math.round(win2x), math.round(win2y) -- if not rounded the controls are blurry
-	end
-	stack_main = Grid:New{
+	local stack = Grid:New{
 		y=20,
-		name = 'facbar_stack',
+		name = 'facbar_stack' .. i,
 		padding = {0,0,0,0},
 		itemPadding = {0, 0, 0, 0},
 		itemMargin = {0, 0, 0, 0},
@@ -889,12 +876,12 @@ function widget:Initialize()
 		columns=2,
 	}
 
-	window_facbar = Window:New{
+	local win = Window:New{
 
 		padding = {3,3,3,3,},
 		dockable = true,
-		name = "facbar_win",
-		x = winx or 0, y = winy or "30%",
+		name = "facbar_win" .. i,
+		x = winx, y = winy,
 		width  = 600,
 		height = 200,
 		parent = Chili.Screen0,
@@ -908,7 +895,7 @@ function widget:Initialize()
 		color = {0,0,0,0},
 		children = {
 			-- Label:New{ caption = WG.Translate("interface", "factories"), fontShadow = true, },
-			stack_main,
+			stack,
 		},
 		OnMouseDown={ function(self)
 			local alt, ctrl, meta, shift = Spring.GetModKeyState()
@@ -918,53 +905,60 @@ function widget:Initialize()
 			return true
 		end },
 	}
-	if SPECMODE_1V1 ~= nil then
-		stack_main2 = Grid:New{
-			y=20,
-			name = 'facbar_stack2',
-			padding = {0,0,0,0},
-			itemPadding = {0, 0, 0, 0},
-			itemMargin = {0, 0, 0, 0},
-			width='100%',
-			height = '100%',
-			resizeItems = false,
-			orientation = 'horizontal',
-			centerItems = false,
-			columns=2,
-			-- hidden = not SPECMODE_1V1,
-		}
-		window_facbar2 = Window:New{
-			padding = {3,3,3,3,},
-			dockable = true,
-			name = "facbar_win2",
-			x = win2x, y = win2y,
-			width  = 600,
-			height = 200,
-			parent = Chili.Screen0,
-			draggable = false,
-			tweakDraggable = true,
-			tweakResizable = true,
-			resizable = false,
-			dragUseGrip = false,
-			minWidth = 56,
-			minHeight = 56,
-			color = {0,0,0,0},
-			-- hidden = not SPECMODE_1V1,
-			children = {
-				-- Label:New{ caption = WG.Translate("interface", "factories"), fontShadow = true, },
-				stack_main2,
-			},
-			OnMouseDown={ function(self)
-				local alt, ctrl, meta, shift = Spring.GetModKeyState()
-				if not meta then return false end
-				WG.crude.OpenPath(options_path)
-				WG.crude.ShowMenu()
-				return true
-			end },
-		}
+	return win, stack
+end
+
+function widget:Initialize()
+	if (not WG.Chili) then
+		widgetHandler:RemoveWidget(widget)
+		return
 	end
 	myAllyTeamID = Spring.GetMyAllyTeamID()
+	myTeamID = Spring.GetMyTeamID()
 	allyTeamSide = GetLeftRightAllyTeamIDs()
+
+	local spectating, fullread = Spring.GetSpectatingState()
+	Echo('myTeamID',myTeamID,'myAllyTeamID',myAllyTeamID)
+	if spectating then
+		local teams = Spring.GetTeamList()
+		if teams[3] and not teams[4] then
+			local pname = {'name', 'playerID', 'teamID','allyTeamID','spec','cpu','ping'}
+			local roster = Spring.GetPlayerRoster()
+			for i,t in pairs(roster) do
+				if not t[5] then -- if not spec
+				 Echo('----',i,t)
+				 for k,v in pairs(t) do
+				   Echo(pname[k],v)
+				 end
+				end
+			end
+			SPECMODE_1V1 = fullread
+		end
+	end
+	self:ViewResize(widgetHandler:GetViewSizes())
+
+	Chili = WG.Chili
+	Button = Chili.Button
+	Label = Chili.Label
+	Window = Chili.Window
+	StackPanel = Chili.StackPanel
+	Grid = Chili.Grid
+	TextBox = Chili.TextBox
+	Image = Chili.Image
+	Progressbar = Chili.Progressbar
+	screen0 = Chili.Screen0
+
+	local winx, winy, win2x, win2y
+	if SPECMODE_1V1 ~= nil then
+		winx, winy, win2x, win2y = vsx * 1/10, vsy * 1/9, vsx * (1/2 + 1/20), vsy * 1/9
+		winx, winy, win2x, win2y = math.round(winx), math.round(winy), math.round(win2x), math.round(win2y) -- if not rounded the controls are blurry
+		window_facbar, stack_main = CreateWin(winx, winy, 1)
+		window_facbar2, stack_main2 = CreateWin(win2x, win2y, 2)
+	else
+		winx, winy = 0, '30%'
+		window_facbar, stack_main = CreateWin(winx, winy, '')
+	end
+
 	UpdateFactoryList()
 
 end
