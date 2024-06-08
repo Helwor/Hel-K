@@ -59,10 +59,7 @@ local echo = Spring.Echo
 -------------------------------------------------------------------------------
 
 local function RecreateFacbar() end
-local function ShowTitle(bool) end
-
-
-
+local function ShowTitles(bool) end
 
 
 
@@ -96,6 +93,7 @@ local function Sleep(bool)
                 if widgetHandler[k .. 'List'] 
                 	-- and k ~= 'PlayerChanged' 
                 then
+                	Echo((bool and 'Remove' or 'Update')..'WidgetCallIn',k)
                     widgetHandler[(bool and 'Remove' or 'Update')..'WidgetCallIn'](widgetHandler,k,widget)
                 end
             end
@@ -116,13 +114,13 @@ options.active = {
 		Sleep(not playerActive)
 		if not playerActive then
 			widget:Shutdown()
-		elseif initialized then
+		elseif not initialized then
 			widget:Initialize()
 		end
 	end,
 	path = helk_path,
 }
-options.specActive = {
+options.spec_active = {
 	name = 'Active as Spec',
 	type = 'bool',
 	value = specActive,
@@ -134,12 +132,12 @@ options.specActive = {
 		Sleep(not specActive)
 		if not specActive then
 			widget:Shutdown()
-		elseif initialized then
+		elseif not initialized then
 			widget:Initialize()
 		end
 
 
-		if self.value then
+		if initialized and self.value then
 			force_update = true
 			widget:PlayerChanged(Spring.GetMyPlayerID())
 		end
@@ -147,11 +145,11 @@ options.specActive = {
 	path = helk_path,
 }
 options.show_title = {
-	name = 'Show Bar Title',
+	name = 'Show Title bar',
 	type = 'bool',
 	value = true,
 	OnChange = function(self)
-		ShowTitle(self.value)
+		ShowTitles(self.value)
 	end,
 	path = helk_path,
 }
@@ -560,6 +558,9 @@ local function WaypointHandler(x,y,button)
 end
 
 RecreateFacbar = function()
+	if not initialized then
+		return
+	end
 	enteredTweak = false
 	if inTweak then return end
 	
@@ -567,6 +568,7 @@ RecreateFacbar = function()
 	if SPECMODE_1V1 ~= nil then
 		stack_main2:ClearChildren()
 	end
+
 	for i,facInfo in ipairs(facs) do
 		local unitDefID = facInfo.unitDefID
 		
@@ -620,6 +622,7 @@ RecreateFacbar = function()
 		stack_main2:Invalidate()
 		stack_main2:UpdateLayout()
 	end
+	ShowTitles(options.show_title.value)
 end
 
 
@@ -888,7 +891,7 @@ local function CreateWin(winx, winy, i, title)
 	}
 	local titlectrl = Label:New{ 
 		x = 2,
-		caption = title or WG.Translate("interface", "factories"), fontShadow = true, 
+		caption = title or WG.Translate("interface", "factories"),
 		-- padding = 
 	}
 	local win = Window:New{
@@ -920,23 +923,33 @@ local function CreateWin(winx, winy, i, title)
 			return true
 		end },
 	}
+	local font = titlectrl.font
+	font.autoOutlineColor = false
 	return win, stack, titlectrl
 end
-function ShowTitle(bool)
-	if not (stack_main and title) then
+local function ShowTitle(stack, title, bool)
+	if not (stack and title) then
 		return
 	end
-
-	local funcToUse = bool and 'Show' or 'Hide'
-	stack_main.y = bool and 10 or 0
-	-- title.y = bool and 0 or -10
-	title[funcToUse](title)
-	if stack_main2 then
-		stack_main2.y = bool and 10 or 0
-		-- title2.y = bool and 0 or -10
-		title2[funcToUse](title2)
+	if bool and not stack.children[1] then
+		bool = false
 	end
-
+	if title.hidden ~= not bool then
+		stack.y = bool and 10 or 0
+		if bool then
+			title:Show()
+		else
+			title:Hide()
+		end
+	end
+end
+function ShowTitles(bool)
+	if stack_main then
+		ShowTitle(stack_main, title, bool)
+	end
+	if stack_main2 then
+		ShowTitle(stack_main2, title2, bool)
+	end
 end
 
 local function GetOpposingAllyTeams()
@@ -981,14 +994,25 @@ end
 
 
 function widget:Initialize()
+	-- if true then
+	-- 	widgetHandler:RemoveWidget(widget)
+	-- 	return
+	-- end
 	if (not WG.Chili) then
 		widgetHandler:RemoveWidget(widget)
+		return
+	end
+	local spectating, fullread = Spring.GetSpectatingState()
+	if not spectating and not options.active.value then
+		options.active:OnChange()
+		return
+	elseif spectating and not options.spec_active.value then
+		option.spec_active:OnChange()
 		return
 	end
 	myAllyTeamID = Spring.GetMyAllyTeamID()
 	myTeamID = Spring.GetMyTeamID()
 
-	local spectating, fullread = Spring.GetSpectatingState()
 	-- Echo('myTeamID',myTeamID,'myAllyTeamID',myAllyTeamID)
 	if spectating then
 		local teams = Spring.GetTeamList()
@@ -1021,20 +1045,40 @@ function widget:Initialize()
 
 	else
 		winx, winy = 0, '30%'
-		window_facbar, stack_main = CreateWin(winx, winy, '')
+		window_facbar, stack_main, title = CreateWin(winx, winy, '')
 	end
-	ShowTitle(options.show_title.value)
-	UpdateFactoryList()
+	ShowTitles(options.show_title.value)
+	initialized = true
 
+	UpdateFactoryList()
 end
 
 function widget:Shutdown()
 	if window_facbar then
 		window_facbar:Dispose()
+		window_facbar = nil
 	end
 	if window_facbar2 then
 		window_facbar2:Dispose()
+		window_facbar2 = nil
 	end
+	if stack_main then
+		stack_main:Dispose()
+		stack_main = nil
+	end
+	if stack_main2 then
+		stack_main2:Dispose()
+		stack_main2 = nil
+	end
+	if title then
+		title:Dispose()
+		title = nil
+	end
+	if title2 then
+		title2:Dispose()
+		title2 = nil
+	end
+	initialized = false
 end
 
 f.DebugWidget(widget)
