@@ -147,7 +147,7 @@ options.specActive = {
 	path = helk_path,
 }
 options.show_title = {
-	name = 'Show Title bar',
+	name = 'Show Bar Title',
 	type = 'bool',
 	value = true,
 	OnChange = function(self)
