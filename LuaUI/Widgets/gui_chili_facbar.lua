@@ -52,14 +52,14 @@ local screen0
 -------------------------------------------------------------------------------
 -------------------------------------------------------------------------------
 
-local window_facbar, window_facbar2, stack_main, stackmain2
+local window_facbar, window_facbar2, stack_main, stackmain2, title, title2
 local echo = Spring.Echo
 
 -------------------------------------------------------------------------------
 -------------------------------------------------------------------------------
 
 local function RecreateFacbar() end
-
+local function ShowTitle(bool) end
 
 
 
@@ -146,7 +146,15 @@ options.specActive = {
 	end,
 	path = helk_path,
 }
-
+options.show_title = {
+	name = 'Show Title bar',
+	type = 'bool',
+	value = true,
+	OnChange = function(self)
+		ShowTitle(self.value)
+	end,
+	path = helk_path,
+}
 -------------------------------------------------------------------------------
 -------------------------------------------------------------------------------
 
@@ -167,7 +175,7 @@ local leftTweak, enteredTweak = false, false
 local cycle_half_s = 1
 local cycle_2_s = 1
 local SPECMODE_1V1 = nil 
-local allyTeamSide
+local LEFT, RIGHT
 
 -------------------------------------------------------------------------------
 -- SOUNDS
@@ -339,13 +347,13 @@ local tooltipButton = WG.Translate("interface", "lmb") .. ' - ' .. GreenStr .. W
 	.. WhiteStr ..  WG.Translate("interface", "rmb") .. ' - ' .. GreenStr .. WG.Translate("interface", "quick_rallypoint_mode")
 
 
-local function AddFacButton(unitID, unitDefID, tocontrol, stackname)
+local function AddFacButton(unitID, unitDefID, tocontrol, stackname, prefTooltip)
 	tocontrol:AddChild(
 		Button:New{
 			caption = '',
 			width = options.buttonsize.value*1.2,
 			height = options.buttonsize.value*1.0,
-			tooltip = tooltipButton
+			tooltip = (prefTooltip or '') .. tooltipButton
 				,
 			backgroundColor = buttonColor,
 			
@@ -579,13 +587,19 @@ RecreateFacbar = function()
 				unfinished_facs[facInfo.unitID] = nil
 			end
 		end
-		Echo("facInfo.allyTeamID is ", facInfo.allyTeamID)
+		-- Echo("facInfo.allyTeamID is ", facInfo.allyTeamID)
 		local stack_main = stack_main
-		if SPECMODE_1V1~=nil and facInfo.allyTeamID == allyTeamSide[2] then
-			stack_main = stack_main2
-			Echo('ok put to stack 2')
+		local prefTooltip
+		if SPECMODE_1V1~=nil then
+			if facInfo.allyTeamID == RIGHT.allyTeamID then
+				stack_main = stack_main2
+				prefTooltip = RIGHT.tooltip .. '\n'
+				-- Echo('ok put to stack 2')
+			else
+				prefTooltip = LEFT.tooltip .. '\n'
+			end
 		end
-		local facStack, boStack, qStack, qStore = AddFacButton(facInfo.unitID, unitDefID, stack_main, i)
+		local facStack, boStack, qStack, qStore = AddFacButton(facInfo.unitID, unitDefID, stack_main, i, prefTooltip)
 		facs[i].facStack  = facStack
 		facs[i].boStack   = boStack
 		facs[i].qStack    = qStack
@@ -611,7 +625,7 @@ end
 
 local function ListFactoryTeam(teamID)
 
-	Echo('list factory',teamID,'myTeamID',myTeamID,'myAllyTeamID', myAllyTeamID)
+	-- Echo('list factory',teamID,'myTeamID',myTeamID,'myAllyTeamID', myAllyTeamID)
 	local teamUnits = Spring.GetTeamUnitsByDefs(teamID, facDefIDArray)
 	local totalUnits = #teamUnits
 	local allyTeamID
@@ -625,7 +639,6 @@ local function ListFactoryTeam(teamID)
 					allyTeamID = Spring.GetUnitAllyTeam(unitID)
 				end
 				push(facs,{ unitID=unitID, unitDefID=unitDefID, allyTeamID = allyTeamID, buildList=bo })
-				Echo('Unit allyTeamID',Spring.GetUnitAllyTeam(unitID),'sides',unpack(allyTeamSide))
 				local _, _, _, _, buildProgress = GetUnitHealth(unitID)
 				if (buildProgress)and(buildProgress<1) then
 					unfinished_facs[unitID] = true
@@ -860,11 +873,9 @@ function widget:MousePress(x, y, button)
 	return false
 end
 
-local function CreateWin(winx, winy, i)
+local function CreateWin(winx, winy, i, title)
 	-- setup Chili
 	local stack = Grid:New{
-		y=20,
-		name = 'facbar_stack' .. i,
 		padding = {0,0,0,0},
 		itemPadding = {0, 0, 0, 0},
 		itemMargin = {0, 0, 0, 0},
@@ -875,7 +886,11 @@ local function CreateWin(winx, winy, i)
 		centerItems = false,
 		columns=2,
 	}
-
+	local titlectrl = Label:New{ 
+		x = 2,
+		caption = title or WG.Translate("interface", "factories"), fontShadow = true, 
+		-- padding = 
+	}
 	local win = Window:New{
 
 		padding = {3,3,3,3,},
@@ -894,7 +909,7 @@ local function CreateWin(winx, winy, i)
 		minHeight = 56,
 		color = {0,0,0,0},
 		children = {
-			-- Label:New{ caption = WG.Translate("interface", "factories"), fontShadow = true, },
+			titlectrl,
 			stack,
 		},
 		OnMouseDown={ function(self)
@@ -905,8 +920,65 @@ local function CreateWin(winx, winy, i)
 			return true
 		end },
 	}
-	return win, stack
+	return win, stack, titlectrl
 end
+function ShowTitle(bool)
+	if not (stack_main and title) then
+		return
+	end
+
+	local funcToUse = bool and 'Show' or 'Hide'
+	stack_main.y = bool and 10 or 0
+	-- title.y = bool and 0 or -10
+	title[funcToUse](title)
+	if stack_main2 then
+		stack_main2.y = bool and 10 or 0
+		-- title2.y = bool and 0 or -10
+		title2[funcToUse](title2)
+	end
+
+end
+
+local function GetOpposingAllyTeams()
+	local gaiaAllyTeamID = select(6, Spring.GetTeamInfo(Spring.GetGaiaTeamID(), false))
+	local allyObjs = {}
+	local allyTeamList = GetLeftRightAllyTeamIDs()
+	for i = 1, #allyTeamList do
+		local allyTeamID = allyTeamList[i]
+
+		local teamList = Spring.GetTeamList(allyTeamID)
+
+		if allyTeamID ~= gaiaAllyTeamID and teamList[1] then
+			local name = Spring.GetGameRulesParam("allyteam_long_name_" .. allyTeamID)
+			-- if string.len(name) > 10 then
+			-- 	name = Spring.GetGameRulesParam("allyteam_short_name_" .. allyTeamID)
+			-- end
+			allyObjs[i] = {
+				allyTeamID = allyTeamID, 
+				name = name, 
+				teamID = teamList[1], 
+				color = {Spring.GetTeamColor(teamList[1])} or {1,1,1,1},
+			}
+		end
+	end
+	if #allyObjs ~= 2 then
+		return
+	end
+	return allyObjs[1], allyObjs[2]
+end
+
+local function strColor(str, c)
+	return table.concat({
+		'\255',
+		string.char(math.floor(c[1]*255)),
+		string.char(math.floor(c[2]*255)),
+		string.char(math.floor(c[3]*255)),
+		str,
+		'\008'
+	})
+	-- return '\255' .. string.char(math.floor(c[1]*255))..string.char(math.floor(c[2]*255))..string.char(math.floor(c[3]*255)) .. str .. '\008'
+end
+
 
 function widget:Initialize()
 	if (not WG.Chili) then
@@ -915,23 +987,15 @@ function widget:Initialize()
 	end
 	myAllyTeamID = Spring.GetMyAllyTeamID()
 	myTeamID = Spring.GetMyTeamID()
-	allyTeamSide = GetLeftRightAllyTeamIDs()
 
 	local spectating, fullread = Spring.GetSpectatingState()
-	Echo('myTeamID',myTeamID,'myAllyTeamID',myAllyTeamID)
+	-- Echo('myTeamID',myTeamID,'myAllyTeamID',myAllyTeamID)
 	if spectating then
 		local teams = Spring.GetTeamList()
 		if teams[3] and not teams[4] then
-			local pname = {'name', 'playerID', 'teamID','allyTeamID','spec','cpu','ping'}
-			local roster = Spring.GetPlayerRoster()
-			for i,t in pairs(roster) do
-				if not t[5] then -- if not spec
-				 Echo('----',i,t)
-				 for k,v in pairs(t) do
-				   Echo(pname[k],v)
-				 end
-				end
-			end
+			LEFT, RIGHT = GetOpposingAllyTeams()
+			LEFT.tooltip = strColor(LEFT.name, LEFT.color)
+			RIGHT.tooltip = strColor(RIGHT.name, RIGHT.color)
 			SPECMODE_1V1 = fullread
 		end
 	end
@@ -952,13 +1016,14 @@ function widget:Initialize()
 	if SPECMODE_1V1 ~= nil then
 		winx, winy, win2x, win2y = vsx * 1/10, vsy * 1/9, vsx * (1/2 + 1/20), vsy * 1/9
 		winx, winy, win2x, win2y = math.round(winx), math.round(winy), math.round(win2x), math.round(win2y) -- if not rounded the controls are blurry
-		window_facbar, stack_main = CreateWin(winx, winy, 1)
-		window_facbar2, stack_main2 = CreateWin(win2x, win2y, 2)
+		window_facbar, stack_main, title = CreateWin(winx, winy, 1, LEFT.tooltip)
+		window_facbar2, stack_main2, title2 = CreateWin(win2x, win2y, 2, RIGHT.tooltip)
+
 	else
 		winx, winy = 0, '30%'
 		window_facbar, stack_main = CreateWin(winx, winy, '')
 	end
-
+	ShowTitle(options.show_title.value)
 	UpdateFactoryList()
 
 end
