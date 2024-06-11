@@ -1005,7 +1005,6 @@ local function SetUnitParams(id, frame, delta)
         -- r,g,b = 1,0,0
         params.base_color = {r,g,b}
         params.color = {r*COLOR_STRENGTH, g*COLOR_STRENGTH, b*COLOR_STRENGTH}
-        unitParams[id] = params
         params.orient = {
             math.random()*(math.random(2)==1 and 1 or -1),
             math.random()*(math.random(2)==1 and 1 or -1),
@@ -1014,6 +1013,9 @@ local function SetUnitParams(id, frame, delta)
         }
         params.radius = UnitDefs[Spring.GetUnitDefID(id) or 1].radius or 50
         params.size = params.radius ^ RADIUS_POW
+
+        unitParams[id] = params
+        
     end
     local speed = params.speed
     local delta = math.abs(speed - (frame + id*57)%(speed*2))
@@ -1023,7 +1025,7 @@ end
 
 local function DrawBubbleFrontMask(id, degrees, verifVisible)
     local params = unitParams[id]
-    local mult = params.mult
+    local mult = PULSE and params.mult
     local size = params.size
     -- gl.Culling(GL.FRONT)
     -- if i == 1 then
@@ -1149,7 +1151,7 @@ local function Process(subjects, indexed, verifVisible)
                 local params = unitParams[id]
                 local mult = params.mult
                 local size = params.size
-                DrawSphere('simpleSphere',id,size + BASE_SIZE,degrees + id * 57,false,mult, verifVisible)
+                DrawSphere('simpleSphere',id,size + BASE_SIZE,degrees + id * 57,false,PULSE and mult, verifVisible)
             end
         else
             for id in pairs(subjects) do
@@ -1157,7 +1159,7 @@ local function Process(subjects, indexed, verifVisible)
                 local mult = PULSE and params.mult
                 local size = params.size
 
-                DrawSphere('simpleSphere',id,size + BASE_SIZE,degrees + id * 57,false,mult, verifVisible)
+                DrawSphere('simpleSphere',id,size + BASE_SIZE,degrees + id * 57,false,PULSE and mult, verifVisible)
             end
         end
 
