@@ -8,7 +8,7 @@ function widget:GetInfo()
         date      = "October 2022",
         license   = "GNU GPL, v2",
         layer     = -1000000000, -- before Smart Builders
-        enabled   = false,  --  loaded by default?
+        enabled   = true,  --  loaded by default?
         handler   = true,
         api       = true,
     }
