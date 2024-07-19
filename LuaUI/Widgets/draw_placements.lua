@@ -1255,7 +1255,10 @@ local function reset(complete)
 	--Echo(debug.getinfo(2).currentline)
 	WG.drawEnabled=false
 	if complete then
-		WG.showeco = g.old_showeco
+		if g.old_showeco ~= nil then
+			WG.showeco = g.old_showeco
+			g.old_showeco = nil
+		end
 	end
 	-- paint farm stuff
 	Paint('reset') 
@@ -3248,7 +3251,7 @@ local function Init()
 		specs.n=1
 	end
 	if E_SPEC[PID] then
-		g.old_showeco = WG.showeco
+		g.old_showeco = WG.showeco or false
 		WG.showeco = true
 		WG.force_show_queue_grid = PID
 	end
@@ -3446,7 +3449,10 @@ local function FinishDrawing(fixedMex)
 		reset()
 		Drawing=false
 		WG.drawingPlacement=false
-		WG.showeco = g.old_showeco
+		if g.old_showeco ~= nil then
+			WG.showeco = g.old_showeco
+			g.old_showeco = nil
+		end
 		WG.force_show_queue_grid = false
 		-- Echo("prev.pos[1],pos[1] is ", prev.pos[1],pointX)
 		-- if specs[1] then EraseOverlap(specs[1][1],specs[1][3]) end
@@ -3555,7 +3561,10 @@ function widget:Update(dt)
 				return
 			end
 		end
-		WG.showeco = g.old_showeco
+		if g.old_showeco ~= nil then
+			WG.showeco = g.old_showeco
+			g.old_showeco = nil
+		end
 		WG.force_show_queue_grid = false
 		reset()
 		return
@@ -3694,7 +3703,10 @@ function widget:KeyRelease(key, mods)
 			sp.SetActiveCommand(-1)
 			reset()
 			PID=false
-			WG.showeco = g.old_showeco
+			if g.old_showeco ~= nil then
+				WG.showeco = g.old_showeco
+				g.old_showeco = nil
+			end
 			WG.force_show_queue_grid = false
 		end
 		return
@@ -5081,6 +5093,5 @@ function widget:Shutdown()
 	end
 end
 f.DebugWidget(widget)
-
 
 
