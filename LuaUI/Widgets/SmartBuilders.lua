@@ -3045,6 +3045,7 @@ function widget:Initialize()
         return
     end
     if not WG.commandTrackerActive then
+        Spring.Echo(widget:GetInfo().name..' cannot work without Command Tracker')
         widgetHandler:RemoveWidget(self)
         return
     end
