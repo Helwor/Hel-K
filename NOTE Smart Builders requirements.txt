@@ -1,0 +1,8 @@
+What's needed to use SmartBuilders
+SmartBuilders.lua (of course)
+UtilsFunc.lua
+-HasViewChanged.lua
+-AddSleepWake.lua
+-OnWidgetState.lua
+UnitsIDCard.lua
+command_tracker.lua
