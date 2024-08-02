@@ -6,3 +6,7 @@ UtilsFunc.lua
 -OnWidgetState.lua
 UnitsIDCard.lua
 command_tracker.lua
+
+
+Also modified vanilla:
+api_cluster_detection.lua  
