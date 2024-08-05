@@ -2,7 +2,7 @@ function widget:GetInfo()
 	return {
 		name      = "Field Factory Selector",
 		desc      = "Selects construction option from a factory",
-		author    = "GoogleFrog",
+		author    = "GoogleFrog, Invite part Helwor",
 		date      = "2 April 2024",
 		license   = "GNU GPL, v2 or later",
 		layer     = 0,
