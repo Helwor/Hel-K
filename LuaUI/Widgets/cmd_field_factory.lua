@@ -117,7 +117,7 @@ local spGetScreenGeometry 		= Spring.GetScreenGeometry
 local spIsGUIHidden 			= Spring.IsGUIHidden
 local spGetUnitIsStunned		= Spring.GetUnitIsStunned
 local spGetUnitRulesParam		= Spring.GetUnitRulesParam
-local spGetSelectedUnitsSorted 	= Spring.GetselectedUnitsSorted
+local spGetSelectedUnitsSorted 		= Spring.GetselectedUnitsSorted
 
 local ALLY_UNITS 	= Spring.ALLY_UNITS
 
