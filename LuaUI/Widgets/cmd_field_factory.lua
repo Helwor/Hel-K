@@ -16,7 +16,7 @@ local requirements = {
 	}
 }
 
-local Echo = Spring.Echo
+
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
 
@@ -131,10 +131,6 @@ local glPopMatrix 	= gl.PopMatrix
 local glColor		= gl.Color
 
 
-
-
-
-
 local function MakeTweakWin() -- a window only to be interacted with during tweak mode
 	field_tweak_win = {
 		parent = WG.Chili.Screen0,
@@ -222,15 +218,7 @@ local function GetOptionsPosition(width, height)
 	
 	return math.floor(x), math.floor(y)
 end
-local spGetUnitCurrentCommand = Spring.GetUnitCurrentCommand
-local spGetSelectedUnits = Spring.GetSelectedUnits
-local function IsSelectingFieldFac()
-	for i, id in ipairs(spGetSelectedUnits()) do
-		if spGetUnitCurrentCommand(id) == CMD_FIELD_FAC_SELECT then
-			return true
-		end
-	end
-end
+
 local function GetButton(parent, x, y, unitDefID, ud, unitName, mini, offsetY, factoryID, stunned)
 	local xStr = tostring((x - 1)*100/COLUMNS) .. "%"
 	local yStr 
@@ -460,7 +448,7 @@ local function DrawInvite()
 		invX, invY = field_tweak_win.x, field_tweak_win.y
 		rX, rY = invX / vsx, invY / vsy
 	end
-	-- Echo('pos of win', field_tweak_win.x, field_tweak_win.y,'invX', invX, 'rX', rX, 'vsx', vsx)
+
 	glPushMatrix()
 	local scale = WG.uiScale
 	glScale(scale, scale, 1)
