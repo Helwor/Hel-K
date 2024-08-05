@@ -12,7 +12,7 @@ function widget:GetInfo()
 end
 local requirements = {
 	exists = {
-		[WIDGET_DIRNAME .. '-SelectionAPI.lua'] = {nil, nil, true}
+		[(WIDGET_DIRNAME or LUAUI_DIRNAME .. 'Widgets/') .. '-SelectionAPI.lua'] = {nil, nil, true}
 	}
 }
 
