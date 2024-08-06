@@ -632,12 +632,13 @@ function widget:GameFrame(f)
 end
 -- saving position
 function widget:GetConfigData()
-	return {rX = rX, rY = rY}
+	return {rX = rX, rY = rY, invSize = invSize}
 end
 function widget:SetConfigData(data)
 	if data.rX then
 		rX, rY = data.rX, data.rY
 		invX, invY = vsx * rX, vsy * rY
+		invSize = data.invSize
 	end
 end
 
