@@ -10,6 +10,9 @@ function widget:GetInfo()
 		handler   = true,
 	}
 end
+
+local Echo = Spring.Echo
+
 local requirements = {
 	exists = {
 		[(WIDGET_DIRNAME or LUAUI_DIRNAME .. 'Widgets/') .. '-SelectionAPI.lua'] = {nil, nil, true}
@@ -83,12 +86,26 @@ for unitDefID = 1, #UnitDefs do
 		fieldFacRange[unitDefID] = ud.buildDistance + 128
 	end
 end
+local plateOfFac = {}
+local facOfPlate = {}
+
+for i = 1, #UnitDefs do
+	local ud = UnitDefs[i]
+	local cp = ud.customParams
+	if cp.child_of_factory then
+		facOfPlate[i] = UnitDefNames[cp.child_of_factory].id
+	end
+	if cp.parent_of_plate then
+		plateOfFac[i] = UnitDefNames[cp.parent_of_plate].id
+	end
+end
 
 -- local CMD_FIELD_FAC_QUEUELESS = Spring.Utilities.CMD.FIELD_FAC_QUEUELESS
 
+local OPT_EXTRA_HEIGHT = 120
 local OPT_MINI_WIDTH = 300
 local OPT_MINI_HEIGHT = 115
-local OPT_EXTRA_HEIGHT = 80
+local OPT_MINI_EXTRA_HEIGHT = 80
 
 local UPDATE_RATE = 30
 local invSize = 60 -- default size
@@ -219,23 +236,24 @@ local function GetOptionsPosition(width, height)
 	return math.floor(x), math.floor(y)
 end
 
-local function GetButton(parent, x, y, unitDefID, ud, unitName, mini, offsetY, factoryID, stunned)
+local function GetButton(parent, x, y, unitDefID, ud, unitName, isInvited, offsetY, factoryID, stunned, mini)
 	local xStr = tostring((x - 1)*100/COLUMNS) .. "%"
 	local yStr 
 	local height
+
 	if offsetY then
-		height = 40
-		yStr = offsetY + (y-1) * 40
+		height = mini and 40 or 59
+		yStr = (offsetY or 0) + (y-1) * (mini and 40 or 59)
 	else
 		height = "50%"
 		yStr = tostring((y - 1)*100/ROWS) .. "%"
 	end
 	local function DoClick()
 		if unitDefID then
-			if mini then
+			if isInvited then
 				-- since we use insertion, overriding the nextDesiredUnitType from gadget before
 				Spring.GiveOrder(CMD_FIELD_FAC_UNIT_TYPE, {unitDefID}, 0)
-				Spring.GiveOrder(CMD.INSERT, {0, CMD_FIELD_FAC_SELECT, 0, factoryID}, CMD.OPT_ALT)
+				Spring.GiveOrder(CMD.INSERT, {0, CMD_FIELD_FAC_SELECT, CMD.OPT_SHIFT, factoryID}, CMD.OPT_ALT)
 
 				-- alternative, but then it doesn't wait for factory to be finished
 				-- Spring.GiveOrder(CMD_FIELD_FAC_QUEUELESS, {factoryID, unitDefID}, 0)
@@ -243,7 +261,7 @@ local function GetButton(parent, x, y, unitDefID, ud, unitName, mini, offsetY, f
 				Spring.GiveOrder(CMD_FIELD_FAC_UNIT_TYPE, {unitDefID}, 0)
 			end
 		else
-			if not mini then
+			if not isInvited then
 				Spring.GiveOrder(CMD_FIELD_FAC_UNIT_TYPE, {-1}, 0)
 			end
 			-- Spring.GiveOrder(CMD.INSERT, {0, CMD_FIELD_FAC_UNIT_TYPE, 0, -1}, CMD.OPT_ALT)
@@ -271,6 +289,7 @@ local function GetButton(parent, x, y, unitDefID, ud, unitName, mini, offsetY, f
 		-- backgroundHoveredColor = stunned and {0.9,0.4,0.2,1} or nil,
 
 	}
+	local image
 	if unitDefID then
 		Chili.Label:New {
 			name = "bottomLeft",
@@ -282,7 +301,7 @@ local function GetButton(parent, x, y, unitDefID, ud, unitName, mini, offsetY, f
 			parent = button,
 			caption = ud.metalCost,
 		}
-		Chili.Image:New {
+		image = Chili.Image:New {
 			x = "5%",
 			y = "4%",
 			right = "5%",
@@ -293,7 +312,7 @@ local function GetButton(parent, x, y, unitDefID, ud, unitName, mini, offsetY, f
 			parent = button,
 		}
 	else
-		Chili.Image:New {
+		image = Chili.Image:New {
 			x = "7%",
 			y = "10%",
 			right = "7%",
@@ -305,12 +324,13 @@ local function GetButton(parent, x, y, unitDefID, ud, unitName, mini, offsetY, f
 	end
 end
 
-local function GenerateOptionsSelector(factoryID, mini, combine)
+local function GenerateOptionsSelector(factoryID, isInvited, combine)
 	if not combine then
 		warned = false
 	end
-	if not factoryID and mini then
-		GetButton(optionsWindow.children[1], 1, 2, nil, nil, nil, mini, mini and offsetY)
+	local mini = vsy < 850
+	if not factoryID and isInvited then
+		GetButton(optionsWindow.children[1], 1, 2, nil, nil, nil, isInvited, isInvited and offsetY, false, false, mini)
 		return
 	end
 	if optionsWindow and not combine then
@@ -338,26 +358,30 @@ local function GenerateOptionsSelector(factoryID, mini, combine)
 		return
 	end
 
+	local width, height, extraHeight, bottomGap
+	if mini then
+		height = OPT_MINI_HEIGHT
+		width = OPT_MINI_WIDTH
+		extraHeight = OPT_MINI_EXTRA_HEIGHT
+	else
+		height = OPT_HEIGHT
+		width = OPT_WIDTH
+		extraHeight = OPT_EXTRA_HEIGHT
+	end
+
 	if combine then
-		offsetY = offsetY + OPT_EXTRA_HEIGHT
+		offsetY = offsetY + extraHeight
 	else
 		offsetY = 0
 	end
 	
-	local width, height, bottomGap
-	if mini then
-		height = OPT_MINI_HEIGHT
-		width = OPT_MINI_WIDTH
-	else
-		height = OPT_HEIGHT
-		width = OPT_WIDTH
-	end
 
 	local stunned, _, inbuild = spGetUnitIsStunned(factoryID)
 	stunned = stunned or ((spGetUnitRulesParam(factoryID, "totalEconomyChange") or 1) <= 0)
 	if stunned and not warned then
 		bottomGap = mini and 21 or 24
 		height = height + bottomGap
+		extraHeight = extraHeight + bottomGap
 	else
 		bottomGap = 0
 	end
@@ -365,7 +389,7 @@ local function GenerateOptionsSelector(factoryID, mini, combine)
 	
 	local x, y = GetOptionsPosition(width, height)
 	if combine then
-		optionsWindow:Resize(nil, optionsWindow.height + OPT_EXTRA_HEIGHT + bottomGap)
+		optionsWindow:SetPos(nil,optionsWindow.y -  extraHeight, nil, optionsWindow.height + extraHeight)
 	else
 		optionsWindow = Chili.Window:New{
 			x = x,
@@ -411,6 +435,7 @@ local function GenerateOptionsSelector(factoryID, mini, combine)
 			align  = "center",
 			autosize = false,
 			font   = {
+				color = {0.9,0.4,0.2,1},
 				size = mini and 15 or 16,
 				outline = true,
 				outlineWidth = 1,
@@ -433,9 +458,9 @@ local function GenerateOptionsSelector(factoryID, mini, combine)
 			row = (i > 6) and 2 or 1
 			col = (i - 1)%6 + row
 		end
-		GetButton(panel, col, row, buildDefID, bud, buildName, mini, mini and offsetY, factoryID, stunned)
+		GetButton(panel, col, row, buildDefID, bud, buildName, isInvited, isInvited and offsetY, factoryID, stunned, mini)
 	end
-	if not mini then
+	if not isInvited then
 		GetButton(panel, 1, 2)
 	end
 end
@@ -596,10 +621,16 @@ function widget:GamePaused(_, isPaused)
 	gamePaused = isPaused
 end
 
+local function IsBroken(id)
+	local stunned, _, inbuild = spGetUnitIsStunned(id)
+	return stunned or inbuild or ((spGetUnitRulesParam(id, "totalEconomyChange") or 1) <= 0)
+end
+
 function widget:GameFrame(f)
 	if candidates and f%UPDATE_RATE == 0 then
 		if not optionsWindow then
 			targettedFacs = false
+			local broken
 			for range, units in pairs(candidates) do
 				for _, candidateID in ipairs(units) do
 					local x, y, z = spGetUnitPosition(candidateID)
@@ -608,14 +639,25 @@ function widget:GameFrame(f)
 						local defID = spGetUnitDefID(id)
 						if factoryDefs[defID] then
 							if not targettedFacs then 
-								targettedFacs = { [defID] = id}
+								targettedFacs = { [defID] = id }
+								if IsBroken(id) then
+									broken = {[id] = true}
+								end
 							else
+								local correspondingDefID = facOfPlate[defID] or plateOfFac[defID]
 								local oneAlready = targettedFacs[defID]
-								if not oneAlready 
-									or select(2, spGetUnitIsStunned(oneAlready))
-									or ((spGetUnitRulesParam(oneAlready, "totalEconomyChange") or 1) <= 0)
-								then
+									or correspondingDefID and targettedFacs[correspondingDefID]
+								if not oneAlready or broken and (broken[oneAlready] and not broken[id]) then
+									if correspondingDefID then
+										targettedFacs[ correspondingDefID ] = nil
+									end
+									if IsBroken(id) then
+										if not broken then broken = {} end
+										broken[id] = true
+									end
+									-- Echo('add', id, UnitDefs[defID].name, 'isBroken', broken[id])
 									targettedFacs[defID] = id
+
 								end
 							end
 						end
