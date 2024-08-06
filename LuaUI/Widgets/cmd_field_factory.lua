@@ -566,7 +566,7 @@ function widget:CommandsChanged()
 	EndInvite()
 	invited = false
 	if optionsWindow then
-		otionsWindow:Dispose()
+		optionsWindow:Dispose()
 		optionsWindow = false
 	end
 	if not WG.commandMap or WG.commandMap[CMD_FIELD_FAC_SELECT] then
