@@ -215,15 +215,15 @@ local lists = {}
 
 function widget:Initialize()
 	NewView = WG.NewView
-	visibleUnits = WG.Visibles and WG.Visibles.not_icons
+	visibleUnits = WG.Visibles and WG.Visibles.not_iconsMap
 	if not (visibleUnits) then
+		Echo(widget:GetInfo().name .. ' requires HasViewChanged.')
 		widgetHandler:RemoveWidget(widget)
 		-- Echo(widget:GetInfo().name .. ' need ' .. (not Units and 'UnitsIDCards' or '')  .. (not visibleUnits and  ((not Units and ', ' or '') .. 'HasViewnChanged') or '') .. '.')
-		Echo(widget:GetInfo().name .. ' requires HasViewChanged.')
 		return
 	end
 	Cam = WG.Cam
-	Units = Cam.Units --WG.UnitsIDCard
+	Units = Cam.Units --WG.UnitsIDCard.units
 	vsx, vsy = widgetHandler:GetViewSizes()
 
 	self:ViewResize(widgetHandler:GetViewSizes())
@@ -408,8 +408,9 @@ end
 local lastView = 0
 local spGetTimer = Spring.GetTimer
 local spDiffTimers = Spring.DiffTimers
+local glUnitRaw = gl.UnitRaw
 local function DrawVisibleUnits(overrideEngineDraw, perUnitStencil)
-	if (Spring.GetGameFrame() % (15) ==0) then
+	if Cam.frame % (15) == 0 then
 		checknow = true
 	end
 
@@ -430,26 +431,21 @@ local function DrawVisibleUnits(overrideEngineDraw, perUnitStencil)
 	-- local visibleUnits = spGetVisibleUnits(ALL_UNITS,nil,false)
 	-- local timer = spGetTimer()
 	-- Spring.Echo("#visibleUnits is ", #visibleUnits)
-	for i = 1, #visibleUnits do
+	-- Echo("table.size(visibleUnits) is ", table.size(visibleUnits))
+	for id in pairs(visibleUnits) do
 		-- if i%10 == 0 and spDiffTimers(spGetTimer(),timer) > 0.05 then
 		-- 	break
 		-- end
-		local id = visibleUnits[i]
 		local unit = Units[id]
 		if not unit then
-			if spGetUnitIsDead(id) then
-				-- Echo('visible unit',id, 'just died, current Frame?',Spring.GetGameFrame(),'visible frame?',visibleUnits.frame,'can get defID ?',spGetUnitDefID(id),'can get pos?',Spring.GetUnitPosition(id),'can get  health?',Spring.GetUnitHealth(id))
-				-- normal
-			else
-				local defID = spGetUnitDefID(id)
-				local name = defID and UnitDefs[defID].name
-				local humanName = name and UnitDefs[defID].humanName
-				Echo('PROBLEM in Outline no shader, no unit for',id,name, humanName,'is valid?',spValidUnitID(id))
-			end
+			local defID = spGetUnitDefID(id)
+			local name = defID and UnitDefs[defID].name
+			local humanName = name and UnitDefs[defID].humanName
+			Echo('PROBLEM in Outline no shader, no unit for',id,name, humanName,'is valid?',spValidUnitID(id))
 		elseif not unit.isCloaked then
 			if checknow  --[[and (supercheap and i<100 or not supercheap)--]] then
 				local unitProgress = Units[id].health[5]
-				if unitProgress == nil or unitProgress >= 0.67 then
+				if unitProgress == nil or unitProgress >= 0.67 then -- when the nano frame is filled up
 					unbuiltUnits[id] = nil
 				else
 					unbuiltUnits[id] = true
@@ -476,7 +472,18 @@ local function DrawVisibleUnits(overrideEngineDraw, perUnitStencil)
 				-- 	lists[id] = list
 				-- end
 				-- glCallList(lists[id])
-				glUnit(id, overrideEngineDraw)
+				-- Echo("overrideEngineDraw is ", overrideEngineDraw)
+				-- glUnit(id, overrideEngineDraw)
+				-- glUnit(id, overrideEngineDraw)
+				-- Spring.SetUnitNoDraw(id, false)
+				-- gl.PushMatrix()
+					-- local _,_,_,x,y,z = Spring.GetUnitPosition(id,true)
+					-- gl.Translate(1,1,1)
+				-- gl.PolygonOffset(8.0, 4.0)
+				
+				glUnit(id, true) -- this is quite expensive, but didnt find any workaround yet (good outline shader would be better)
+					-- gl.UnitShape(Spring.GetUnitDefID(id), Spring.GetMyTeamID(),false)
+				-- gl.PopMatrix()
 				if perUnitStencil then
 
 					glDepthMask(false)
@@ -508,21 +515,21 @@ local function DrawVisibleUnitsLines(underwater, frontLines)
 		gl.LineWidth(3.0 * thickness * thicknessMult)
 		gl.PolygonOffset(8.0, 4.0)
 	else
-		if options.lowQualityOutlines.value then
-			gl.LineWidth(4.0 * thickness * thicknessMult)
-		end
 		if frontLines then
 			if supercheap then
+				local relDist = Cam.relDist
 				-- gl.LineWidth(2.3)
-				local width =math.max(1.2, 2.3 *  1400 / Cam.relDist)
-				width = math.min(2.3, width)
-				-- Echo('relDist',Cam.relDist,'width',width)
+				local width = math.clamp(2.2 *  1300 / relDist, 1.2, 2.3)
+				-- Echo('relDist',Cam.relDist,'width',width,'uncapped',2.2 *  1300 / relDist,'test',2.2 *  1000 / relDist)
 				gl.LineWidth(width)--cheap
+				gl.PolygonOffset(1.0, 0.0) -- fix the crab and newton
+				
 			else
 				gl.LineWidth(3.0 * thickness * thicknessMult)
 				gl.PolygonOffset(10.0, 5.0) -- it gives thicker lines on closer thing
 			end
-
+		elseif options.lowQualityOutlines.value then
+			gl.LineWidth(4.0 * thickness * thicknessMult)
 		end
 	end
 
@@ -546,9 +553,9 @@ local function DrawVisibleUnitsLines(underwater, frontLines)
 	glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)
 	glDepthTest(false)
 
-	if underwater then
+	-- if underwater then
 		gl.PolygonOffset(0.0, 0.0)
-	end
+	-- end
 end
 
 local blur_h = function()
@@ -564,6 +571,7 @@ local blur_v = function()
 end
 local function GlobalDraw()
 	if supercheap then
+
 		glDepthMask(true)
 		DrawVisibleUnitsLines(false, true) 
 		glDepthMask(false)
@@ -611,15 +619,19 @@ local function GlobalDraw()
 	end
 end
 function widget:DrawWorldPreUnit()
-	if WG.panning then
+	if --[[WG.drawingPlacement or WG.EzSelecting or--]] WG.panning then
 		return
 	end
-	-- if globalList and lastView == NewView[1] then
+	if not next(visibleUnits) then
+		return
+	end
+	-- if globalList and lastView == NewView[1] then -- this is actually much slower
 	-- else
 	-- 	lastView = NewView[1]
 	-- 	globalList = glCreateList(GlobalDraw)
 	-- end
 	-- glCallList(globalList)
+
 	GlobalDraw()
 end
 function widget:DrawWorldRefraction()
@@ -695,7 +707,7 @@ function WidgetInitNotify(w,name,preloading)
 		return
 	end
 	if name == 'HasViewChanged' then
-		-- Units = WG.UnitsIDCard
+		-- Units = WG.UnitsIDCard.units
 		widgetHandler:Wake(widget)
 	end
 end
