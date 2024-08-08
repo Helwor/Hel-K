@@ -237,6 +237,7 @@ local function GetOptionsPosition(width, height)
 end
 
 local function GetButton(parent, x, y, unitDefID, ud, unitName, isInvited, offsetY, factoryID, stunned, mini)
+	-- TODO Uniformize the size handling
 	local xStr = tostring((x - 1)*100/COLUMNS) .. "%"
 	local yStr 
 	local height
@@ -269,6 +270,9 @@ local function GetButton(parent, x, y, unitDefID, ud, unitName, isInvited, offse
 		invited = false
 		optionsWindow:Dispose()
 		optionsWindow = false
+		if gamePaused then -- renew the invite after the pick
+			return widget:GameFrame(UPDATE_RATE)
+		end
 	end
 
 	local button = Chili.Button:New {
@@ -289,7 +293,7 @@ local function GetButton(parent, x, y, unitDefID, ud, unitName, isInvited, offse
 		-- backgroundHoveredColor = stunned and {0.9,0.4,0.2,1} or nil,
 
 	}
-	local image
+
 	if unitDefID then
 		Chili.Label:New {
 			name = "bottomLeft",
@@ -301,7 +305,7 @@ local function GetButton(parent, x, y, unitDefID, ud, unitName, isInvited, offse
 			parent = button,
 			caption = ud.metalCost,
 		}
-		image = Chili.Image:New {
+		Chili.Image:New {
 			x = "5%",
 			y = "4%",
 			right = "5%",
@@ -312,7 +316,7 @@ local function GetButton(parent, x, y, unitDefID, ud, unitName, isInvited, offse
 			parent = button,
 		}
 	else
-		image = Chili.Image:New {
+		Chili.Image:New {
 			x = "7%",
 			y = "10%",
 			right = "7%",
@@ -325,6 +329,7 @@ local function GetButton(parent, x, y, unitDefID, ud, unitName, isInvited, offse
 end
 
 local function GenerateOptionsSelector(factoryID, isInvited, combine)
+	-- TODO Uniformize the size handling
 	if not combine then
 		warned = false
 	end
