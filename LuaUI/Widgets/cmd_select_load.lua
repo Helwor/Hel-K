@@ -5,7 +5,7 @@ function widget:GetInfo()
   return {
     name      = "Transport Load Double Tap",
     desc      = "Matches selected transports and units when load is double pressed.",
-    author    = "GoogleFrog",
+    author    = "GoogleFrog, rewrite and improved by Helwor",
     date      = "8 May 2015",
     license   = "GNU GPL, v2 or later",
     layer     = -math.huge,
@@ -650,7 +650,7 @@ function widget:UnitCommand(unitID, defID, teamID, cmdID, params, opts)
 	   -- Echo("UC ", unitID, 'cmd', cmdID,'#params', #params,':',unpack(params))
     --     for k,v in pairs(opts) do Echo(k,v) end
     -- end
-
+    if cmdID == 1 then cmdID = params[2] end
     if cmdID == CMD_WAIT and waitForWait[unitID] then
         local transID = waitForWait[unitID]
         CopyMoveThenUnload(transID, unitID)
