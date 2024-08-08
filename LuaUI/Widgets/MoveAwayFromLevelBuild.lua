@@ -1,16 +1,3 @@
---------------------------------------------------------------------------------
---------------------------------------------------------------------------------
---
---  file:    unit_smart_nanos.lua
---  brief:   Enables auto reclaim & repair for idle turrets
---  author:  Owen Martindell
---
---  Copyright (C) 2008.
---  Licensed under the terms of the GNU GPL, v2 or later.
---
---------------------------------------------------------------------------------
---------------------------------------------------------------------------------
-
 function widget:GetInfo()
   return {
     name      = "Move Away From Level Build",
@@ -162,6 +149,8 @@ function NotifyExecute(unit,id,cmd,params,opts,tag,fromCmdDone,fromLua,realcmd,r
             -- Echo('sx',sx,'H',gy,'future H',y,height,"offset,selfsize * SQUARE_SIZE is ", offset,selfsize * SQUARE_SIZE,neededX,neededZ)
             local moveOrder
             -- as the basic RAW_MOVE order stop when goal is reached under a radius of 16 (2 squares)
+            local max = (UnitDefs[spGetUnitDefID(id)].buildDistance or 0) + def.radius
+            neededX, neededZ = math.min(neededX, max), math.min(neededZ, max)
             if neededX>tolerance and neededZ>tolerance then
                 if neededX<neededZ then
                     moveOrder = true
