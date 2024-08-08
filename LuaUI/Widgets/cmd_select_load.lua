@@ -349,7 +349,7 @@ local function AdjustForBlockedGround(location, unitID)
 end
 
 
-local function CopyMoveThenUnload(transID, unitID)
+local function CopyMoveThenUnload(transID, unitID, isWaiting)
 	local cmdQueue = spGetCommandQueue(unitID, -1)
 	if not cmdQueue then
 		return
@@ -359,7 +359,7 @@ local function CopyMoveThenUnload(transID, unitID)
 	
 	areaTarget = nil
     local lastMove
-	for i = 1, #cmdQueue do
+	for i = (isWaiting and 2 or 1), #cmdQueue do -- ignore the first waitcommand executed
 
 		local cmd = cmdQueue[i]
 		local keepGoing, haltAtCommand, moveParams = ProcessCommand(unitID, cmd.id, cmd.params, lastMove)
@@ -645,22 +645,39 @@ end
 
 
 local waitForWait = {}
+local IsWaiting
+do
+    local CMD_OPT_ALT = CMD.OPT_ALT
+    function IsWaiting(id)
+        local cmd, opt = spGetUnitCurrentCommand(id)
+        return cmd == CMD_WAIT and (opt % (2*CMD_OPT_ALT) < CMD_OPT_ALT)
+    end
+end
+
 function widget:UnitCommand(unitID, defID, teamID, cmdID, params, opts)
     -- if unitID == 28777 then
 	   -- Echo("UC ", unitID, 'cmd', cmdID,'#params', #params,':',unpack(params))
     --     for k,v in pairs(opts) do Echo(k,v) end
     -- end
+    -- if os.clock() - (lasttime or 0) > 2 then
+    --     Echo('---------')
+    --     lasttime = os.clock()
+    -- end
     if cmdID == 1 then cmdID = params[2] end
+
+    -- Echo(UnitDefs[Spring.GetUnitDefID(unitID)].humanName,'cmd',cmdID,allCmds[cmdID],'wait for wait', waitForWait[unitID])
     if cmdID == CMD_WAIT and waitForWait[unitID] then
         local transID = waitForWait[unitID]
         CopyMoveThenUnload(transID, unitID)
         waitForWait[unitID] = nil
 	elseif cmdID == CMD_LOAD_UNITS and waitForLoad[unitID] then
 		local transporteeID = waitForLoad[unitID]
-        if letAutoWait then
+        local isWaiting = IsWaiting(transporteeID)
+        if letAutoWait and not isWaiting then
             waitForWait[transporteeID] = unitID
         else
-		    CopyMoveThenUnload(unitID, transporteeID)
+            -- Echo('copy',spGetCommandQueue(transporteeID, 0),'orders')
+		    CopyMoveThenUnload(unitID, transporteeID, isWaiting)
         end
 		waitForLoad[unitID] = nil
 	end
