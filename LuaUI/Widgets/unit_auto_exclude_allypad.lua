@@ -29,7 +29,7 @@ local function Sleep(bool)
         end
     end
 end
-
+local EXCLUDE = false -- default, this variable is actually unused afterward
 
 options_path = 'Hel-K/' .. widget.GetInfo().name
 options = {}
@@ -59,7 +59,7 @@ do
 end
 
 
-local EXCLUDE = false -- default
+
 local myPlayerID
 local myTeam
 local myAllyeamID
