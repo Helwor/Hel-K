@@ -548,12 +548,14 @@ function widget:MousePress(x,y,button)
 		end
 		if not Chili.Screen0:IsAbove(x,y) then
 			optionsWindow:Dispose()
+			optionsWindow = false
 			if invited then
 				invited = false
+				widget:GameFrame(UPDATE_RATE)
+				return true
 			else
 				Spring.GiveOrder(CMD_FIELD_FAC_UNIT_TYPE, {-1}, 0)
 			end
-			optionsWindow = false
 		end
 	else
 		if button == 1 and invite then
