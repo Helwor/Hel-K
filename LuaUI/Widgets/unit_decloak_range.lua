@@ -2,7 +2,7 @@ function widget:GetInfo()
 	return {
 		name      = "Decloak Range",
 		desc      = "Display decloak range around cloaked units. v2",
-		author    = "banana_Ai, dahn, GoogleFrog (rewrite), ashdnazg (effectively), Helwor (implement sphere and some optimization)",
+		author    = "banana_Ai, dahn, GoogleFrog (rewrite), ashdnazg (effectively), Helwor (implement sphere and rewrite/optimization)",
 		date      = "15 Jul 2016",
 		license   = "GNU GPL v2",
 		layer     = 0,
@@ -13,9 +13,9 @@ end
 VFS.Include("LuaRules/Utilities/glVolumes.lua")
 local Echo = Spring.Echo
 
-local gl						= gl
-local GL						= GL
-local Spring					= Spring
+local gl				= gl
+local GL				= GL
+local Spring				= Spring
 
 local spGetUnitDefID			= Spring.GetUnitDefID
 local spGetUnitPosition			= Spring.GetUnitPosition
@@ -23,16 +23,16 @@ local spGetUnitRulesParam		= Spring.GetUnitRulesParam
 local spGetUnitIsCloaked		= Spring.GetUnitIsCloaked
 local spGetSelectedUnits		= Spring.GetSelectedUnits
 local spGetUnitIsCloaked		= Spring.GetUnitIsCloaked
-local spGetSelectedUnitsSorted	= Spring.GetSelectedUnitsSorted
+local spGetSelectedUnitsSorted		= Spring.GetSelectedUnitsSorted
 local spIsSphereInView			= Spring.IsSphereInView
 
-local glColor					= gl.Color
-local glCallList				= gl.CallList
-local drawAlpha					= 0.17
-local disabledColor				= { 0.9,0.5,0.3, drawAlpha}
-local cloakedColor				= { 0.4, 0.4, 0.9, drawAlpha} -- drawAlpha on purpose!
-local disabledColor_less			= { 0.9,0.5,0.3, drawAlpha/2}
-local cloakedColor_less				= { 0.4, 0.4, 0.9, drawAlpha/2} -- drawAlpha on purpose!
+local glColor				= gl.Color
+local glCallList			= gl.CallList
+local drawAlpha				= 0.17
+local disabledColor			= { 0.9,0.5,0.3, drawAlpha}
+local cloakedColor			= { 0.4, 0.4, 0.9, drawAlpha} -- drawAlpha on purpose!
+local disabledColor_less		= { 0.9,0.5,0.3, drawAlpha/2}
+local cloakedColor_less			= { 0.4, 0.4, 0.9, drawAlpha/2} -- drawAlpha on purpose!
 
 
 local decloakDist		= setmetatable({}, {__index = function(self, defID) rawset(self, defID, UnitDefs[defID].decloakDistance or false) end})
