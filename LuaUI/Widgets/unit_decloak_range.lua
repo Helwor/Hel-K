@@ -14,17 +14,18 @@ VFS.Include("LuaRules/Utilities/glVolumes.lua")
 local Echo = Spring.Echo
 local Chili
 
-local gl 						= gl
-local GL						= GL
-local spGetUnitDefID       		= Spring.GetUnitDefID
-local spGetUnitPosition    		= Spring.GetUnitPosition
+local spGetUnitDefID			= Spring.GetUnitDefID
+local spGetUnitPosition			= Spring.GetUnitPosition
 local spGetUnitRulesParam  		= Spring.GetUnitRulesParam
-local spGetUnitIsCloaked   		= Spring.GetUnitIsCloaked
-local spGetSelectedUnits   		= Spring.GetSelectedUnits
-local spGetUnitIsCloaked   		= Spring.GetUnitIsCloaked
+local spGetUnitIsCloaked		= Spring.GetUnitIsCloaked
+local spGetSelectedUnits		= Spring.GetSelectedUnits
+local spGetUnitIsCloaked		= Spring.GetUnitIsCloaked
 local spGetSelectedUnitsSorted 	= Spring.GetSelectedUnitsSorted
 local spIsSphereInView			= Spring.IsSphereInView
-local glColor              		= gl.Color
+
+local gl 						= gl
+local GL						= GL
+local glColor					= gl.Color
 local drawAlpha = 0.17
 local disabledColor = { 0.9,0.5,0.3, drawAlpha}
 local cloakedColor = { 0.4, 0.4, 0.9, drawAlpha} -- drawAlpha on purpose!
@@ -216,9 +217,6 @@ list.mergeVolumesEnd = gl.CreateList(
 )
 
 
-
-
-
 function gl.Utilities.DrawSimpleSphere(x, y, z, radius)
   gl.PushMatrix()
   gl.Translate(x, y, z)
@@ -289,7 +287,7 @@ local function DrawDecloakRanges(pass, cloakeds)
 	end
 	local merged = merged and next(pass, next(pass))
 	local drawGroundCircle, DrawSphere = false, false
-	if options.useSphere.value and gl.Utilities.DrawSimpleSphere then
+	if useSphere and gl.Utilities.DrawSimpleSphere then
 		DrawSphere = gl.Utilities.DrawSimpleSphere
 	else
 		drawGroundCircle = options.mergeCircles.value and gl.Utilities.DrawMergedGroundCircle or gl.Utilities.DrawGroundCircle
@@ -303,15 +301,15 @@ local function DrawDecloakRanges(pass, cloakeds)
 		end
 
 	end
-  	if DrawSphere then
+	if DrawSphere then
 		gl.BlendFuncSeparate(GL.SRC_ALPHA, GL.ONE, GL.ONE_MINUS_SRC_ALPHA, GL.ONE_MINUS_DST_ALPHA)
-  		if merged then
-  			gl.CallList(list.mergeVolumes)
-  		else
-  			gl.Culling(GL.BACK)
-  			gl.DepthTest(true)
-  		end
-  	end
+		if merged then
+			gl.CallList(list.mergeVolumes)
+		else
+			gl.Culling(GL.BACK)
+			gl.DepthTest(true)
+		end
+	end
 	for unitID, radius in pairs(pass) do
 		if DrawSphere then
 			glColor(cloakeds[unitID] and cloakedColor_less or disabledColor_less)
