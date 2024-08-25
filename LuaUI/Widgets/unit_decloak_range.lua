@@ -2,7 +2,7 @@ function widget:GetInfo()
 	return {
 		name      = "Decloak Range",
 		desc      = "Display decloak range around cloaked units. v2",
-		author    = "banana_Ai, dahn, GoogleFrog (rewrite), ashdnazg (effectively), Helwor (implement sphere and some optimization)",
+		author    = "banana_Ai, dahn, GoogleFrog (rewrite), ashdnazg (effectively), Helwor (implement sphere and rewrite/optimization)",
 		date      = "15 Jul 2016",
 		license   = "GNU GPL v2",
 		layer     = 0,
