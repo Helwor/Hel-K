@@ -2,7 +2,7 @@ function widget:GetInfo()
 	return {
 		name      = "Decloak Range",
 		desc      = "Display decloak range around cloaked units. v2",
-		author    = "banana_Ai, dahn, GoogleFrog (rewrite), ashdnazg (effectively), Helwor (implement sphere and rewrite/optimization)",
+		author    = "banana_Ai, dahn, GoogleFrog (rewrite), ashdnazg (effectively), Helwor (implement sphere and some optimization)",
 		date      = "15 Jul 2016",
 		license   = "GNU GPL v2",
 		layer     = 0,
@@ -27,6 +27,7 @@ local spGetSelectedUnitsSorted	= Spring.GetSelectedUnitsSorted
 local spIsSphereInView			= Spring.IsSphereInView
 
 local glColor					= gl.Color
+local glCallList				= gl.CallList
 local drawAlpha = 0.17
 local disabledColor = { 0.9,0.5,0.3, drawAlpha}
 local cloakedColor = { 0.4, 0.4, 0.9, drawAlpha} -- drawAlpha on purpose!
@@ -224,7 +225,7 @@ function gl.Utilities.DrawSimpleSphere(x, y, z, radius)
   gl.PushMatrix()
   gl.Translate(x, y, z)
   gl.Scale(radius, radius, radius)
-  gl.CallList(list.sphere)
+  glCallList(list.sphere)
   gl.PopMatrix()
 end
 
@@ -266,11 +267,11 @@ list.stencilMergeInpEnd = gl.CreateList(
 
 
 function MergeInprint(dlist)
-	gl.CallList(list.stencilMergeInp)
-	gl.CallList(dlist)
-	gl.CallList(list.stencilMergeInpApply)
-	gl.CallList(dlist)
-	gl.CallList(list.stencilMergeInpEnd)
+	glCallList(list.stencilMergeInp)
+	glCallList(dlist)
+	glCallList(list.stencilMergeInpApply)
+	glCallList(dlist)
+	glCallList(list.stencilMergeInpEnd)
 end
 
 function gl.Utilities.DrawMergedSphereInprint(x, y, z, radius) -- Draw ground inprint of spheres
@@ -307,7 +308,7 @@ local function DrawDecloakRanges(pass, cloakeds, poses)
 	if DrawSphere then
 		gl.BlendFuncSeparate(GL.SRC_ALPHA, GL.ONE, GL.ONE_MINUS_SRC_ALPHA, GL.ONE_MINUS_DST_ALPHA)
 		if merged then
-			gl.CallList(list.mergeVolumes)
+			glCallList(list.mergeVolumes)
 		else
 			gl.Culling(GL.BACK)
 			gl.DepthTest(true)
@@ -321,7 +322,7 @@ local function DrawDecloakRanges(pass, cloakeds, poses)
 		end
 		local pos = poses[unitID]
 		if DrawSphere then
-			DrawSphere(pos[1] ,pos[4] ,pos[3], radius)
+			DrawSphere(pos[1] ,pos[4] , pos[3], radius)
 		else
 			drawGroundCircle(pos[1], pos[3], radius)
 		end
@@ -330,7 +331,7 @@ local function DrawDecloakRanges(pass, cloakeds, poses)
 	if DrawSphere then
 		gl.BlendFuncSeparate(GL.SRC_ALPHA, GL.ONE_MINUS_SRC_ALPHA, GL.ONE, GL.ZERO)
 		if merged then
-			gl.CallList(list.mergeVolumesEnd)
+			glCallList(list.mergeVolumesEnd)
 		else
 			gl.Clear(GL.STENCIL_BUFFER_BIT, 0)
 		end
