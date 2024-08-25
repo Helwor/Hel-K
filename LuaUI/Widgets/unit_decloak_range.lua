@@ -88,7 +88,7 @@ options = {
 -------------------------------------------------------------------------------------
 -------------------------------------------------------------------------------------
 local function GetSubjects(wantMerged)
-	local cloakeds = {}
+	local cloakeds, poses = {}, {}
 	local pass1, pass2
 	if wantMerged then
 		pass1, pass2 = {}, {}
@@ -118,8 +118,10 @@ local function GetSubjects(wantMerged)
 				if radius then
 					local x, y, z, _, y2 = spGetUnitPosition(unitID, true)
 					if spIsSphereInView(x, y2, z, radius) then
+						poses[unitID] = {x,y,z,y2}
 						if pass2 and not cloaked then
 							pass2[unitID] = radius
+
 						else
 							pass1[unitID] = radius
 							cloakeds[unitID] = cloaked
@@ -129,7 +131,7 @@ local function GetSubjects(wantMerged)
 			end
 		end
 	end
-	return pass1, pass2, cloakeds
+	return pass1, pass2, cloakeds, poses
 end
 
 
@@ -282,7 +284,7 @@ end
 local DrawSphereInprint = gl.Utilities.DrawMergedSphereInprint
 
 
-local function DrawDecloakRanges(pass, cloakeds)
+local function DrawDecloakRanges(pass, cloakeds, poses)
 	if not next(pass) then
 		return
 	end
@@ -297,8 +299,8 @@ local function DrawDecloakRanges(pass, cloakeds)
 	if DrawSphere --[[and merged--]] then
 		for unitID, radius in pairs(pass) do
 			glColor(cloakeds[unitID] and cloakedColor or disabledColor)
-			local _, _, _, x, y, z = spGetUnitPosition(unitID, true)
-			DrawSphereInprint(x, y, z, radius)
+			local pos = poses[unitID]
+			DrawSphereInprint(pos[1], pos[2], pos[3], radius)
 		end
 
 	end
@@ -317,12 +319,11 @@ local function DrawDecloakRanges(pass, cloakeds)
 		else
 			glColor(cloakeds[unitID] and cloakedColor or disabledColor)
 		end
+		local pos = poses[unitID]
 		if DrawSphere then
-			local _, _, _, x, y, z = spGetUnitPosition(unitID, true)
-			DrawSphere(x ,y ,z, radius)
+			DrawSphere(pos[1] ,pos[4] ,pos[3], radius)
 		else
-			local x, y, z = spGetUnitPosition(unitID)
-			drawGroundCircle(x, z, radius)
+			drawGroundCircle(pos[1], pos[3], radius)
 		end
 	end
 
@@ -368,10 +369,10 @@ function widget:UnitCloaked(curID, curUnitDefID, teamID)
 end
 
 local function DrawRanges()
-	local pass1, pass2, cloakeds = GetSubjects(merged)
-	DrawDecloakRanges(pass1, cloakeds)
+	local pass1, pass2, cloakeds, poses = GetSubjects(merged)
+	DrawDecloakRanges(pass1, cloakeds, poses)
 	if pass2 then
-		DrawDecloakRanges(pass2, cloakeds)
+		DrawDecloakRanges(pass2, cloakeds, poses)
 	end
 end
 
