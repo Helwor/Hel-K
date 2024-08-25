@@ -12,20 +12,20 @@ end
 
 VFS.Include("LuaRules/Utilities/glVolumes.lua")
 local Echo = Spring.Echo
-local Chili
+
+local gl						= gl
+local GL						= GL
+local Spring					= Spring
 
 local spGetUnitDefID			= Spring.GetUnitDefID
 local spGetUnitPosition			= Spring.GetUnitPosition
-local spGetUnitRulesParam  		= Spring.GetUnitRulesParam
+local spGetUnitRulesParam		= Spring.GetUnitRulesParam
 local spGetUnitIsCloaked		= Spring.GetUnitIsCloaked
 local spGetSelectedUnits		= Spring.GetSelectedUnits
 local spGetUnitIsCloaked		= Spring.GetUnitIsCloaked
-local spGetSelectedUnitsSorted 	= Spring.GetSelectedUnitsSorted
+local spGetSelectedUnitsSorted	= Spring.GetSelectedUnitsSorted
 local spIsSphereInView			= Spring.IsSphereInView
 
-local gl 						= gl
-local GL						= GL
-local Spring					= Spring
 local glColor					= gl.Color
 local drawAlpha = 0.17
 local disabledColor = { 0.9,0.5,0.3, drawAlpha}
@@ -34,12 +34,12 @@ local disabledColor_less = { 0.9,0.5,0.3, drawAlpha/2}
 local cloakedColor_less = { 0.4, 0.4, 0.9, drawAlpha/2} -- drawAlpha on purpose!
 
 
-local decloakDist = setmetatable({}, {__index = function(self, defID) rawset(self, defID, UnitDefs[defID].decloakDistance or false) end})
-local currentSelection = false
-local selectionMap = false
+local decloakDist 		= setmetatable({}, {__index = function(self, defID) rawset(self, defID, UnitDefs[defID].decloakDistance or false) end})
+local currentSelection 	= false
+local selectionMap 		= false
 local selectionCanCloak = false
 local myPlayerID, myTeamID
-local spec, fullview = Spring.GetSpectatingState()
+local spec, fullview 	= Spring.GetSpectatingState()
 local merged, useSphere = true, false -- defaults
 
 options_path = 'Settings/Interface/Defence and Cloak Ranges'
@@ -87,7 +87,6 @@ options = {
 
 -------------------------------------------------------------------------------------
 -------------------------------------------------------------------------------------
--- Drawing
 local function GetSubjects(wantMerged)
 	local cloakeds = {}
 	local pass1, pass2
@@ -132,6 +131,10 @@ local function GetSubjects(wantMerged)
 	end
 	return pass1, pass2, cloakeds
 end
+
+
+-- Drawing
+
 
 local function SphereVertex(x, y, z, neg)
     if neg then
@@ -260,11 +263,11 @@ list.stencilMergeInpEnd = gl.CreateList(
 )
 
 
-function MergeInprint(vol_dlist)
+function MergeInprint(dlist)
 	gl.CallList(list.stencilMergeInp)
-	gl.CallList(vol_dlist)
+	gl.CallList(dlist)
 	gl.CallList(list.stencilMergeInpApply)
-	gl.CallList(vol_dlist)
+	gl.CallList(dlist)
 	gl.CallList(list.stencilMergeInpEnd)
 end
 
@@ -333,6 +336,7 @@ local function DrawDecloakRanges(pass, cloakeds)
 	else
 		gl.Clear(GL.STENCIL_BUFFER_BIT, 0)
 	end
+	gl.DepthTest(false)
 end
 
 function widget:CommandsChanged()
