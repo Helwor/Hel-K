@@ -103,32 +103,37 @@ local function GetSubjects(wantMerged)
 			local cloaked = spGetUnitIsCloaked(unitID)
 			local wantCloak = (not cloaked) and ((spGetUnitRulesParam(unitID, "wantcloak") == 1) or (spGetUnitRulesParam(unitID, "areacloaked") == 1))
 			if cloaked or wantCloak then
-				local radius
-				local commCloaked = spGetUnitRulesParam(unitID, "comm_decloak_distance")
-				if commCloaked and (commCloaked > 0) then
-					radius = commCloaked
+	for i = 1, #currentSelection do
+		local unitID = currentSelection[i]
+		local unitDefID = spGetUnitDefID(unitID)
+		if unitDefID then
+			local cloaked = spGetUnitIsCloaked(unitID)
+			if cloaked
+			or spGetUnitRulesParam(unitID, "wantcloak") == 1
+			or spGetUnitRulesParam(unitID, "areacloaked") == 1
+			then
+				local radius = spGetUnitRulesParam(unitID, "areacloaked_radius")
+				if not radius or radius <= 0 then
+					radius = spGetUnitRulesParam(unitID, "comm_decloak_distance")
 				end
-				
-				local areaCloaked = spGetUnitRulesParam(unitID, "areacloaked_radius")
-				if areaCloaked and (areaCloaked > 0) then
-					radius = areaCloaked
-				end
-				if not radius then
+				if not radius or radius <= 0 then
 					radius = decloakDist[unitDefID]
 				end
-				if radius then
+				if radius and radius > 0 then
 					local x, y, z, _, y2 = spGetUnitPosition(unitID, true)
 					if spIsSphereInView(x, y2, z, radius) then
-						poses[unitID] = {x,y,z,y2}
+						poses[unitID] = {x, y, z, y2}
 						if pass2 and not cloaked then
 							pass2[unitID] = radius
-
 						else
 							pass1[unitID] = radius
 							cloakeds[unitID] = cloaked
 						end
 					end
 				end
+			end
+		end
+	end
 			end
 		end
 	end
