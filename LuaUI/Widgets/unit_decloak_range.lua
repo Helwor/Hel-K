@@ -134,9 +134,6 @@ local function GetSubjects(wantMerged)
 			end
 		end
 	end
-			end
-		end
-	end
 	return pass1, pass2, cloakeds, poses
 end
 
