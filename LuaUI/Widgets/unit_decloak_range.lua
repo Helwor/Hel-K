@@ -301,7 +301,7 @@ local function DrawDecloakRanges(pass, cloakeds, poses)
 		for unitID, radius in pairs(pass) do
 			glColor(cloakeds[unitID] and cloakedColor or disabledColor)
 			local pos = poses[unitID]
-			DrawSphereInprint(pos[1], pos[2], pos[3], radius)
+			DrawSphereInprint(pos[1], pos[4], pos[3], radius)
 		end
 
 	end
