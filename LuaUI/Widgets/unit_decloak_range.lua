@@ -25,6 +25,7 @@ local spIsSphereInView			= Spring.IsSphereInView
 
 local gl 						= gl
 local GL						= GL
+local Spring					= Spring
 local glColor					= gl.Color
 local drawAlpha = 0.17
 local disabledColor = { 0.9,0.5,0.3, drawAlpha}
@@ -58,11 +59,8 @@ options = {
 		OnChange = function (self)
 			if self.value then
 				widgetHandler:UpdateCallIn("DrawWorldPreUnit")
-				widgetHandler:UpdateCallIn("DrawWorld")
-
 			else
 				widgetHandler:RemoveCallIn("DrawWorldPreUnit")
-				widgetHandler:RemoveCallIn("DrawWorld")
 			end
 		end
 	},
@@ -366,7 +364,7 @@ function widget:UnitCloaked(curID, curUnitDefID, teamID)
 end
 
 local function DrawRanges()
-	local pass1, pass2, cloakeds = GetSubjects(options.mergeCircles.value)
+	local pass1, pass2, cloakeds = GetSubjects(merged)
 	DrawDecloakRanges(pass1, cloakeds)
 	if pass2 then
 		DrawDecloakRanges(pass2, cloakeds)
@@ -389,17 +387,9 @@ function widget:PlayerChanged(playerID)
 	end
 end
 function widget:DrawWorldPreUnit()
-	if useSphere then
-		return
-	end
 	DrawFunc()
 end
-function widget:DrawWorld()
-	if not useSphere then
-		return
-	end
-	DrawFunc()
-end
+
 function widget:Initialize()
 	myPlayerID = Spring.GetMyPlayerID()
 	widget:PlayerChanged(myPlayerID)
