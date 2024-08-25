@@ -28,20 +28,20 @@ local spIsSphereInView			= Spring.IsSphereInView
 
 local glColor					= gl.Color
 local glCallList				= gl.CallList
-local drawAlpha = 0.17
-local disabledColor = { 0.9,0.5,0.3, drawAlpha}
-local cloakedColor = { 0.4, 0.4, 0.9, drawAlpha} -- drawAlpha on purpose!
-local disabledColor_less = { 0.9,0.5,0.3, drawAlpha/2}
-local cloakedColor_less = { 0.4, 0.4, 0.9, drawAlpha/2} -- drawAlpha on purpose!
+local drawAlpha					= 0.17
+local disabledColor				= { 0.9,0.5,0.3, drawAlpha}
+local cloakedColor				= { 0.4, 0.4, 0.9, drawAlpha} -- drawAlpha on purpose!
+local disabledColor_less			= { 0.9,0.5,0.3, drawAlpha/2}
+local cloakedColor_less				= { 0.4, 0.4, 0.9, drawAlpha/2} -- drawAlpha on purpose!
 
 
-local decloakDist 		= setmetatable({}, {__index = function(self, defID) rawset(self, defID, UnitDefs[defID].decloakDistance or false) end})
-local currentSelection 	= false
-local selectionMap 		= false
-local selectionCanCloak = false
+local decloakDist		= setmetatable({}, {__index = function(self, defID) rawset(self, defID, UnitDefs[defID].decloakDistance or false) end})
+local currentSelection		= false
+local selectionMap		= false
+local selectionCanCloak		= false
 local myPlayerID, myTeamID
-local spec, fullview 	= Spring.GetSpectatingState()
-local merged, useSphere = true, false -- defaults
+local spec, fullview		= Spring.GetSpectatingState()
+local merged, useSphere		= true, false -- defaults
 
 options_path = 'Settings/Interface/Defence and Cloak Ranges'
 options_order = {
