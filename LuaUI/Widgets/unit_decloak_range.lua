@@ -101,13 +101,6 @@ local function GetSubjects(wantMerged)
 		local unitDefID = spGetUnitDefID(unitID)
 		if unitDefID then
 			local cloaked = spGetUnitIsCloaked(unitID)
-			local wantCloak = (not cloaked) and ((spGetUnitRulesParam(unitID, "wantcloak") == 1) or (spGetUnitRulesParam(unitID, "areacloaked") == 1))
-			if cloaked or wantCloak then
-	for i = 1, #currentSelection do
-		local unitID = currentSelection[i]
-		local unitDefID = spGetUnitDefID(unitID)
-		if unitDefID then
-			local cloaked = spGetUnitIsCloaked(unitID)
 			if cloaked
 			or spGetUnitRulesParam(unitID, "wantcloak") == 1
 			or spGetUnitRulesParam(unitID, "areacloaked") == 1
