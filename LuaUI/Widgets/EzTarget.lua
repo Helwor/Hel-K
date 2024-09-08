@@ -1429,13 +1429,13 @@ function widget:Update(dt)
     local mx,my,lmb,mmb,rmb, outsideSpring = spGetMouseState()
     local realMousePress = lmb or mmb or rmb
     if v.mousePressed and not realMousePress then
-        Echo('EzTARGET CORRECTED IN UPDATE, actually NOT PRESSED ',spGetMouseState())
-        Echo('MouseState:',unpack(MouseState))
+        -- Echo('EzTARGET CORRECTED IN UPDATE, actually NOT PRESSED ',spGetMouseState())
+        -- Echo('MouseState:',unpack(MouseState))
         v.mousePressed = false
     end
     if realMousePress and not v.mousePressed then
-        Echo('EzTARGET CORRECTED IN UPDATE, actually PRESSED ',spGetMouseState())
-        Echo('MouseState:',unpack(MouseState))
+        -- Echo('EzTARGET CORRECTED IN UPDATE, actually PRESSED ',spGetMouseState())
+        -- Echo('MouseState:',unpack(MouseState))
 
         s.acquiredSelect = false
         checkForSelBox = false
