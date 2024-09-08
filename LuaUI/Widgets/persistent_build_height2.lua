@@ -76,7 +76,7 @@ local spGetSelectedUnits        = Spring.GetSelectedUnits
 local spGetModKeyState          = Spring.GetModKeyState
 local spGetUnitTeam             = Spring.GetUnitTeam
 local spGetMyTeamID             = Spring.GetMyTeamID
-local spGetAllUnits             = Spring.GetAllUnits
+-- local spGetAllUnits             = Spring.GetAllUnits
 local spGetCommandQueue         = Spring.GetCommandQueue
 local spGiveOrderToUnit         = Spring.GiveOrderToUnit
 local spGiveOrderToUnitArray    = Spring.GiveOrderToUnitArray
@@ -98,7 +98,7 @@ local spGetUnitIsDead           = Spring.GetUnitIsDead
 local spGetUnitPosition         = Spring.GetUnitPosition
 
 -- local spuAndBit                 = Spring.Utilities.AndBit
-local spuCheckBit               = Spring.Utilities.CheckBit
+-- local spuCheckBit               = Spring.Utilities.CheckBit
 --local spuGetUnitCanBuild = Spring.Utilities.GetUnitCanBuild -- (id, defID to build)
 local spGetUnitCurrentCommand   = Spring.GetUnitCurrentCommand
 
@@ -136,6 +136,9 @@ local XYZ_TABLE = {}
 local XYZP_TABLE = {}
 local CTRL_TABLE = {ctrl = true}
 local INSERT_TABLE = {[3]=--[[CMD_OPT_INTERNAL+--]]CMD_OPT_SHIFT}
+
+local NEW_PID = true
+local BRIEF_SNAP = false
 -- previously local INSERT_TABLE = {[3]=CMD_OPT_SHIFT}
 
 local myTeamID = Spring.GetMyTeamID()
@@ -401,7 +404,7 @@ local hold = false
 local snapTime = spGetTimer()
 local ordered = false
 
-local currentCommand
+-- local currentCommand
 
 
 local prevMx, prevMy
@@ -1541,10 +1544,22 @@ function widget:KeyPress(key, mods, isRepeat)
         g.timeOutNoTerra = os.clock() + 3
         return true
     end
-    if snapTime and spDiffTimers(spGetTimer(),snapTime)<0.25 then
+    if NEW_PID then
+        NEW_PID = false
+        placementHeight = not g.noterra and buildHeight[PID] or 0
+        if placementHeight ~= 0 then
+            snapTime=spGetTimer()
+            -- BRIEF_SNAP = true
+            update = true
+            groundModule:DefineMaxOffset(key == heightIncrease,value,true)
+        end
+        return true
+    end
+    if snapTime and spDiffTimers(spGetTimer(),snapTime)<(0.25 - (BRIEF_SNAP and 0.15 or 0)) then
         return true
     else 
         snapTime=false
+        BRIEF_SNAP = false
     end
 
     -- block height change for 0.25 second when reaching float point or zero ground point for the ease of the user wanting to get back quickly to zero elevation
@@ -1569,12 +1584,24 @@ function widget:MouseWheel(up, value)
     if groundModule.snapFloat and not p.canSub and value<0 then
         return true
     end
-    if snapTime and spDiffTimers(spGetTimer(),snapTime)<0.25 then
+    if snapTime and spDiffTimers(spGetTimer(),snapTime)<0.25 - (BRIEF_SNAP and 0.15 or 0) then
         return true
     else 
         snapTime=false
+        BRIEF_SNAP = false
     end
 -- block height change for 0.25 second when reaching float point or zero ground point for the ease of the user wanting to get back quickly to zero elevation
+    if NEW_PID then
+        NEW_PID = false
+        placementHeight = not g.noterra and buildHeight[PID] or 0
+        if placementHeight ~= 0 then
+            snapTime=spGetTimer()
+            -- BRIEF_SNAP = true
+            update = true
+            groundModule:DefineMaxOffset(up,0)
+        end
+        return true
+    end
     placementHeight, pointY = groundModule:DefineMaxOffset(up,value)
 
     -- Echo("now placementHeight,offset is ", placementHeight,offset)
@@ -1605,9 +1632,9 @@ local function ApplyHeight(lot,useBuildHeight) -- defining height and duplicatin
         if isMex  or g.noterra then
             customElev = 0
         elseif pid == PID then
-            customElev = placementHeight
+            customElev = NEW_PID and 0 or placementHeight
         elseif useBuildHeight then
-            customElev = buildHeight[pid]
+            customElev = NEW_PID and 0 or buildHeight[pid]
         end
         local outMap =  X-p.sizeX<0 or X+p.sizeX>maxx or Z-p.sizeZ<0 or Z+p.sizeZ>maxz
         if outMap then 
@@ -2739,6 +2766,7 @@ function widget:Update(dt)
 
     end
     local wasLeftClick, wasRightClick = leftClick, rightClick
+
     alt,ctrl,meta,shift = spGetModKeyState()
 
     _,_,leftClick,_,rightClick = spGetMouseState()
@@ -2820,7 +2848,15 @@ function widget:Update(dt)
     if PID ~= -activeCommand then
         PID = -activeCommand
         myPlatforms.oriPH = false
-        placementHeight= not g.noterra and buildHeight[PID] or 0
+
+        -- placementHeight = not g.noterra and buildHeight[PID] or 0
+        local engaged = DP and DP.status == 'engaged'
+        if not engaged then
+            NEW_PID = true
+            placementHeight = 0
+        end
+
+
         -- if not CI_Disabled then
         --     -- local CI = widgetHandler:FindWidget('CommandInsert')
         --     -- if CI then
@@ -2828,7 +2864,7 @@ function widget:Update(dt)
         --     --     CI_Disabled = true
         --     -- end
         -- end
-        currentCommand=Com -- backup to recover PID on use of meta -- not used anymore
+        -- currentCommand=Com -- backup to recover PID on use of meta -- not used anymore
         update = true
     end
     if not PID then
