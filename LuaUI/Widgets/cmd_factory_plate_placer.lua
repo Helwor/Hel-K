@@ -6,7 +6,7 @@
 
 function widget:GetInfo()
 	return {
-		name      = "Factory Plate Placer2",
+		name      = "Factory Plate Placer",
 		desc      = "Replaces factory placement with plates of the appropriate type, and integrates CMD_BUILD_PLATE behaviour",
 		author    = "GoogleFrog/DavetheBrave",
 		date      = "23 September 2021",
