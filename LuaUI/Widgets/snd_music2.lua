@@ -22,11 +22,23 @@ function widget:GetInfo()
 		enabled = true -- loaded by default?
 	}
 end
-local Echo = Spring.Echo
-local spPlaySoundStream = Spring.PlaySoundStream
-local spStopSoundStream = Spring.StopSoundStream
+
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
+-- see `widget:GameID` below.
+-- getting initially same set of tracks during replay
+-- continue last album after a reload in case of random option
+local seed 
+local gameID = Spring.GetGameRulesParam('GameID')
+local randomChosen = false
+local randomAlbumUseSeed = nil 
+local continueAlbum = false
+local function SetRandomSeed()
+	if seed then
+		math.randomseed(seed)
+		seed = math.random(1e8)
+	end
+end
 
 local includedAlbums = {
 	denny = {
@@ -38,7 +50,7 @@ local includedAlbums = {
 		humanName = "Superintendent",
 	}
 }
-local oldTrackListName = 'denny'
+local trackListName = 'denny'
 
 local trackList = {
 	warTracks       = {},
@@ -67,19 +79,48 @@ options = {
 	albumSelection = {
 		name = 'Track list',
 		type = 'radioButton',
-		value = oldTrackListName,
+		value = trackListName,
 		items = {
 			{key = 'denny', name = includedAlbums.denny.humanName},
 			{key = 'superintendent', name = includedAlbums.superintendent.humanName},
+			{key = 'random', name = 'Chosen at random'},
 		},
-		OnChange = function(self, value)
-			if self.value ~= oldTrackListName and includedAlbums[self.value] and includedAlbums[self.value].tracks then
-				oldTrackListName = self.value
-				trackList = includedAlbums[self.value].tracks
-				if WG.Music then
-					WG.Music.StopTrack()
+		OnChange = function(self)
+			local value = self.value
+			if value == 'random' then
+				if randomChosen then
+					return
+				end
+				randomChosen = true
+				if continueAlbum then
+					value = continueAlbum
+				else
+					if randomAlbumUseSeed then 
+						math.randomseed(seed)
+					end
+
+					value = trackListName
+					local r = math.random(#self.items - 1)
+
+					local item = self.items[r]
+					if item.key == 'random' then -- in case the item 'random' is not at last position
+						item = self.items[r-1] or self.items[r+1]
+					end
+					value = item.key
+				end
+			else
+				randomChosen = false
+			end
+			if value ~= trackListName then
+				if includedAlbums[value] and includedAlbums[value].tracks then
+					trackListName = value
+					trackList = includedAlbums[value].tracks
+					if WG.Music then
+						WG.Music.StopTrack()
+					end
 				end
 			end
+
 		end,
 	},
 }
@@ -105,17 +146,18 @@ local looping = false
 local musicMuted = false
 local musicPaused = false
 
-
-local UnitDefs = UnitDefs
-
 local initialized = false
 local gameStarted = Spring.GetGameFrame() > 0
+local widgetReloaded = gameStarted
+
 local myTeam = Spring.GetMyTeamID()
 local isSpec = Spring.GetSpectatingState() or Spring.IsReplay()
 local defeat = false
 
 local spToggleSoundStreamPaused = Spring.PauseSoundStream
+local spGetUnitRulesParam = Spring.GetUnitRulesParam
 
+local UnitDefs = UnitDefs
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
 local function GetMusicType()
@@ -127,11 +169,11 @@ local function StartLoopingTrack(trackInit, trackLoop)
 		Spring.Log(widget:GetInfo().name, LOG.ERROR, "Missing one or both tracks for looping")
 	end
 	haltMusic = true
-	spStopSoundStream()
+	Spring.StopSoundStream()
 	musicType = 'custom'
 	
 	loopTrack = trackLoop
-	spPlaySoundStream(trackInit, WG.music_volume or MUSIC_VOLUME_DEFAULT)
+	Spring.PlaySoundStream(trackInit, WG.music_volume or MUSIC_VOLUME_DEFAULT)
 	looping = 0.5
 end
 
@@ -143,7 +185,7 @@ local function StartTrack(track)
 
 	haltMusic = false
 	looping = false
-	spStopSoundStream()
+	Spring.StopSoundStream()
 	
 	local newTrack = previousTrack
 	if musicType == 'custom' then
@@ -154,45 +196,39 @@ local function StartTrack(track)
 		newTrack = track -- play specified track
 		musicType = 'custom'
 	else
-		local tries = 0
-		repeat
-			if (not gameStarted) then
-				if trackList.briefingTracks.len == 0 then
-					return
-				end
-				newTrack = trackList.briefingTracks[math.random(1, trackList.briefingTracks.len)]
-				musicType = "briefing"
-			elseif musicType == 'peace' then
-				if trackList.peaceTracks.len == 0 then
-					return
-				end
-				newTrack = trackList.peaceTracks[math.random(1, trackList.peaceTracks.len)]
-			elseif musicType == 'war' then
-				if trackList.warTracks.len == 0 then
-					return
-				end
-				newTrack = trackList.warTracks[math.random(1, trackList.warTracks.len)]
+		if not gameStarted then
+			if trackList.briefingTracks[1] then
+				musicType = 'briefing'
+			else
+				return
 			end
-			tries = tries + 1
-		until newTrack ~= previousTrack or tries >= 10
-	end
-	if newTrack ~= previousTrack then
-		local oldprevious = previousTrack
-		previousTrack = newTrack
-		local time = Spring.GetTimer()
-		spPlaySoundStream(newTrack,WG.music_volume or MUSIC_VOLUME_DEFAULT)
-		time = Spring.DiffTimers(Spring.GetTimer(),time)
-		if time > 0.15 then
-			Spring.Echo('spPlaySoundStrem took ' .. ('%.3f'):format(time), 'played ' .. oldprevious, 'now playing ' .. newTrack)
 		end
-		
-		WG.music_start_volume = WG.music_volume
+		local wantedTracks = trackList[musicType .. 'Tracks']
+		local len = #wantedTracks
+		if len == 0 then
+			return
+		elseif len == 1 then
+			newTrack = wantedTracks[len]
+		elseif len == 2 then
+			newTrack = wantedTracks[len] ~= previousTrack and wantedTracks[len] or wantedTracks[len - 1]
+		else
+			SetRandomSeed()
+			local r = math.random(len - 1)
+			if previousTrack == wantedTracks[1] or r ~= 1 and previousTrack == wantedTracks[r] then
+				r = r + 1
+			end
+			newTrack = wantedTracks[r]
+		end
 	end
+	previousTrack = newTrack
+	Spring.PlaySoundStream(newTrack,WG.music_volume or MUSIC_VOLUME_DEFAULT)
+	
+	WG.music_start_volume = WG.music_volume
 end
 
 local function StopTrack(noContinue)
 	looping = false
-	spStopSoundStream()
+	Spring.StopSoundStream()
 	if noContinue then
 		haltMusic = true
 	else
@@ -216,16 +252,9 @@ local function SetPeaceThreshold(num)
 		peaceThreshold = 1000
 	end
 end
-local keypressed = {}
-function widget:KeyPress(key, mods, isRepeat)
-	keypressed[key] = true
-end
-function widget:KeyRelease(key, mods, isRepeat)
-	keypressed[key] = nil
-end
+
 function widget:Update(dt)
 	if not initialized then
-		math.randomseed(os.clock()* 100)
 		initialized = true
 		-- these are here to give epicmenu time to set the values properly
 		-- (else it's always default at startup)
@@ -241,15 +270,19 @@ function widget:Update(dt)
 				defeatTracks    = VFS.DirList(dir .. 'defeat/', '*.ogg', vfsMode),
 			}
 		end
-		
-		trackList = includedAlbums[options.albumSelection.value].tracks
-		for name,t in pairs(trackList) do
-			t.len = #t
+		if gameID then
+			-- update the tracklistName case: reload, random chosen at start
+			widget:GameID(gameID)
+		else
+			math.randomseed(os.clock()* 100)
 		end
+		trackList = includedAlbums[trackListName].tracks
+	elseif randomAlbumUseSeed == nil then
+		-- case replay: widget:gameID() hasn't been triggered yet
+		randomAlbumUseSeed = false
+		continueAlbum = false
 	end
-	if WG.EzSelecting or WG.panning or WG.drawingPlacement then
-		return
-	end
+	
 	timeframetimer_short = timeframetimer_short + dt
 	if timeframetimer_short > 0.03 then
 		local playedTime, totalTime = Spring.GetSoundStreamTime()
@@ -258,14 +291,14 @@ function widget:Update(dt)
 			if looping == 0.5 then
 				looping = 1
 			elseif playedTime >= totalTime - LOOP_BUFFER then
-				spStopSoundStream()
-				spPlaySoundStream(loopTrack,WG.music_volume or MUSIC_VOLUME_DEFAULT)
+				Spring.StopSoundStream()
+				Spring.PlaySoundStream(loopTrack,WG.music_volume or MUSIC_VOLUME_DEFAULT)
 			end
 		end
 		timeframetimer_short = 0
 	end
 	if not musicMuted and WG.music_volume == 0 then
-		spStopSoundStream()
+		Spring.StopSoundStream()
 		musicMuted = true
 		musicPaused = false
 	elseif musicMuted and WG.music_volume > 0 then
@@ -318,14 +351,34 @@ function widget:Update(dt)
 		end
 	end
 end
-
+function widget:GameID(id)
+	-- Idempotence issue:
+	-- -when on replay we can't know the id until player connect, meanwhile the briefing track (if any) is playing and is not following the randomseed sequence
+	-- -when not on replay the GameID trigger after first round of Update
+	-- In any case option.OnChange got triggered before
+	gameID = id
+	seed = tonumber('0x' .. id)
+	-- when number given is too big, the resulting sequence is the same / when difference between numbers is too small, the resulting number is the same
+	while seed > 1e8 do
+		seed = seed^0.8
+	end
+	if options.albumSelection.value == 'random' then
+		if Spring.GetSoundStreamTime() < 0.5 then -- we don't change current album if a briefing track has started
+			randomChosen = false
+			randomAlbumUseSeed = true
+			options.albumSelection:OnChange()
+		end
+	end
+	randomAlbumUseSeed = false
+	continueAlbum = false
+end
 function widget:GameStart()
 	if not gameStarted then
 		gameStarted = true
 		previousTrackType = musicType
 		musicType = "peace"
 		if Spring.GetSoundStreamTime() > 0 then -- if there's a briefing track playing, stop it and start peace track.
-			spStopSoundStream()
+			Spring.StopSoundStream()
 		end
 	end
 end
@@ -357,11 +410,14 @@ function widget:UnitDestroyed(unitID, unitDefID, teamID)
 	if unitExceptions[unitDefID] then
 		return
 	end
+	if spGetUnitRulesParam(unitID, "wasMorphedTo") then
+		return
+	end
 	local metalCost = UnitDefs[unitDefID].metalCost
 	local unitWorth = metalCost > 8000 and 700
 		or metalCost > 3000 and 500
 		or metalCost > 1000 and 300
-		or metalCost > 500  and 200
+		or metalCost > 500 and 200
 		or 50
 	dethklok[1] = dethklok[1] + unitWorth
 end
@@ -378,18 +434,20 @@ local function PlayGameOverMusic(gameWon)
 		if #trackList.victoryTracks <= 0 then
 			return
 		end
+		SetRandomSeed()
 		track = trackList.victoryTracks[math.random(1, #trackList.victoryTracks)]
 		musicType = "victory"
 	else
 		if #trackList.defeatTracks <= 0 then
 			return
 		end
+		SetRandomSeed()
 		track = trackList.defeatTracks[math.random(1, #trackList.defeatTracks)]
 		musicType = "defeat"
 	end
 	looping = false
-	spStopSoundStream()
-	spPlaySoundStream(track,WG.music_volume or MUSIC_VOLUME_DEFAULT)
+	Spring.StopSoundStream()
+	Spring.PlaySoundStream(track,WG.music_volume or MUSIC_VOLUME_DEFAULT)
 	WG.music_start_volume = WG.music_volume
 end
 
@@ -414,9 +472,21 @@ function widget:Initialize()
 end
 
 function widget:Shutdown()
-	spStopSoundStream()
+	Spring.StopSoundStream()
 	WG.Music = nil
 end
-
+-- save up current album to be continued in case of /luaui reload or simple widget reload
+function widget:GetConfigData()
+	return {currentGameAlbum = {gameID = gameID, trackListName =  trackListName}}
+end
+function widget:SetConfigData(data)
+	if not gameID then -- no reload occurred (or replay case before user connect), nothing to do
+		return
+	end
+	local current = data.currentGameAlbum
+	if current and current.gameID == gameID then
+		continueAlbum = current.trackListName
+	end
+end
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
