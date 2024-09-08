@@ -331,7 +331,15 @@ options.tryedges = {
 		tryEdges = self.value
 	end,
 }
-
+-- options.useEraser = { -- not implemented
+-- 	name = 'Enable Eraser',
+-- 	desc = '',
+-- 	type = 'bool',
+-- 	value = useEraser,
+-- 	OnChange = function(self)
+-- 		useEraser = self.value
+-- 	end,
+-- }
 ------------- DEBUG OPTIONS
 
 local Debug = { -- default values, modifiable in options
@@ -556,7 +564,7 @@ WG.drawEnabled = false
 
 -- local rmbAct=false
 
-local status ='none'
+status ='none'
 local waitReleaseShift=false
 
 
@@ -4021,11 +4029,14 @@ function widget:MousePress(mx, my, button)
 					end
 				end
 			elseif status=='ready' or status=='engaged' then
-				status='erasing'
-				sp.SetActiveCommand(0)
-				WG.force_show_queue_grid = true
-				EraseOverlap()
-				return true
+				-- if useEraser then -- not implemented
+					status='erasing'
+					sp.SetActiveCommand(0)
+					WG.force_show_queue_grid = true
+					EraseOverlap()
+					return true
+				-- end
+				-- return
 			end
 		end
 		prev.firstmx, prev.firstmy = mx,my
