@@ -1,14 +1,17 @@
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
+-- can use modified unit_initial_queue.lua to be used in pregame
+
+
 
 function widget:GetInfo()
 	return {
-		name      = "Factory Plate Placer",
+		name      = "Factory Plate Placer2",
 		desc      = "Replaces factory placement with plates of the appropriate type, and integrates CMD_BUILD_PLATE behaviour",
 		author    = "GoogleFrog/DavetheBrave",
 		date      = "23 September 2021",
 		license   = "GNU GPL, v2 or later",
-		layer     = -1,
+		layer     = -1, -- to catch build before Draw Placement
 		enabled   = true,
 	}
 end
@@ -30,6 +33,8 @@ local spTraceScreenRay   = Spring.TraceScreenRay
 local spGetMouseState    = Spring.GetMouseState
 local spGetGroundHeight  = Spring.GetGroundHeight
 local spGetUnitDefID     = Spring.GetUnitDefID
+local spGetPlayerInfo	 = Spring.GetPlayerInfo
+local spGetCmdDescIndex  = Spring.GetCmdDescIndex
 
 local floor = math.floor
 local mapX = Game.mapSizeX
@@ -55,14 +60,25 @@ local glLineStipple         = gl.LineStipple
 --------------------------------------------------------------------------------
 
 options_path = 'Settings/Interface/Building Placement'
-options_order = { 'ctrl_toggle'}
+options_order = {'ctrl_use'}
 options = {
-	ctrl_toggle = {
+	ctrl_use = {
 		name = "Ctrl toggles Factory/Plate",
-		type = 'bool',
-		value = false,
+		type = 'radioButton',
+		items = { 
+			{key = '0', name = 'Unused', desc = 'When placing a factory or plate, press Ctrl to select whether a factory or construction plate is placed.',},
+			{key = '1', name = 'On Press', desc = 'When placing a factory or plate, press Ctrl to select whether a factory or construction plate is placed.',},
+			{key = '2', name = 'When held', desc = 'When placing a factory or plate, press Ctrl to select whether a factory or construction plate is placed.',},
+		},
+		default = '0',
+		value = '0',
 		noHotkey = true,
 		desc = 'When placing a factory or plate, press Ctrl to select whether a factory or construction plate is placed.',
+		OnChange = function(self)
+			if self.value == '0' then
+				reverse = false
+			end
+		end
 	},
 }
 
@@ -90,9 +106,10 @@ local inCircle = {
 local oddX = {}
 local oddZ = {}
 local buildAction = {}
-local childOfFactory = {}
-local parentOfPlate = {}
+local facOfPlate = {}
+local plateOfFac = {}
 local floatOnWater = {}
+local queuedFactories = {}
 
 for i = 1, #UnitDefs do
 	local ud = UnitDefs[i]
@@ -104,10 +121,10 @@ for i = 1, #UnitDefs do
 		floatOnWater[i] = ud.floatOnWater
 		
 		if cp.child_of_factory then
-			childOfFactory[i] = UnitDefNames[cp.child_of_factory].id
+			facOfPlate[i] = UnitDefNames[cp.child_of_factory].id
 		end
 		if cp.parent_of_plate then
-			parentOfPlate[i] = UnitDefNames[cp.parent_of_plate].id
+			plateOfFac[i] = UnitDefNames[cp.parent_of_plate].id
 		end
 	end
 end
@@ -125,7 +142,7 @@ local closestFactoryData
 local activeCmdOverride
 local cmdFactoryDefID
 local cmdPlateDefID
-
+local reverse = false
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
 
@@ -156,16 +173,43 @@ for defID, def in pairs(UnitDefs) do
     end
 end
 
-local tempQueue
+local copy = function(t)
+	local c = {}
+	for k,v in pairs(t) do
+		c[k] = v
+	end
+	return c
+end
+local tempQueue = false
+local gamePaused = select(3,Spring.GetGameSpeed())
+local GetPing
+function widget:GamePaused(_,status)
+	gamePaused = status
+end
+do
+	lastAsked = 0
+	local ping = gamePaused and 0.250 or select(6,spGetPlayerInfo(myPlayerID, true))
+	GetPing = function(now)
+		if gamePaused then
+			return ping
+		end
+		if now > lastAsked + 1.5 then
+			ping = select(6,spGetPlayerInfo(myPlayerID, true))
 
+			lastAsked = now
+		end
+		return ping
+	end
+end
 function widget:CommandNotify(cmd, params, opts)
-
-	if cmd < 0 and parentOfPlate[-cmd] then
+	if cmd < 0 and (plateOfFac[-cmd] or facOfPlate[-cmd]) then
+		-- Echo('CN',cmd,os.clock())
 		if not tempQueue then
 			tempQueue = {}
 		end
-		tempQueueClock = os.clock()
-		tempQueue[params[1] .. '-' .. params[3]] = {unitDefID = -cmd, x = params[1], y = params[2], z = params[3], queued = true}
+		local now = os.clock()
+		tempQueueTimeOut = now + GetPing(now) * 2.2
+		tempQueue[params[1] .. '-' .. params[3]] = {unitDefID = -cmd, x = params[1], y = params[2], z = params[3], queued = true, timeOut = tempQueueTimeOut}
 	end
 end
 
@@ -180,6 +224,9 @@ end
 local spGetGameSeconds = Spring.GetGameSeconds
 
 function widget:UnitCommand(id, _,_,cmd, params,opts)
+	-- if cmd == 1 or cmd < 0 then
+	-- 	Echo('UC received',cmd,'params',unpack(params))
+	-- end
 	if tempQueue then
 		if cmd == 1 then -- insertion case
 			cmd = params[2]
@@ -198,14 +245,25 @@ end
 
 
 
-local function GetQueuedFactories()
-	local t = spGetSelectedUnitsSorted()
-		
-	if tempQueue and tempQueueClock + 1 < os.clock() then
-		tempQueue = false
+local function UpdateQueuedFactories()
+	local selSorted = WG.selectionDefID or spGetSelectedUnitsSorted()
+	local now = os.clock()
+	if tempQueue then -- tempQueue allow to detect queued building before the order is given back from the server
+		for id, data in pairs(tempQueue) do
+			if now > data.timeOut then
+				tempQueue[id] = nil
+				-- Echo('fac plate placer 2 timed out', data.unitDefID)
+			end
+		end
+		if not next(tempQueue) then
+			tempQueue = false
+		end
 	end
-	local ret = tempQueue or {}
-	if not t then
+	local ret = copy(tempQueue or {})
+	queuedFactories = ret
+	WG.queuedFactories = ret
+	WG.queuedFactoriesUpdateTime = now
+	if not selSorted then
 		return ret
 	end
 	if WG.InitialQueue then
@@ -213,7 +271,7 @@ local function GetQueuedFactories()
 		if queue then
 			for i, build in ipairs(queue) do
 				local defID = build[1]
-				if parentOfPlate[defID] then
+				if plateOfFac[defID] then
 					local x,y,z = build[2], build[3], build[4]
 					if not ret[x .. '-' .. z] then
 						ret[x .. '-' .. z] = {unitDefID = defID, x=x, y=y, z=z, queued = true}
@@ -222,13 +280,13 @@ local function GetQueuedFactories()
 			end
 		end
 	else
-		for defID, units in pairs(t) do
+		for defID, units in pairs(selSorted) do
 			if builderDefID[defID] then
 				for i, id in ipairs(units) do
 					local queue = spGetCommandQueue(id, -1)
 					if queue then
 						for i, order in ipairs(queue) do
-							if order.id < 0 and parentOfPlate[-order.id] then
+							if order.id < 0 and plateOfFac[-order.id] then
 								local x,y,z = unpack(order.params)
 								if not ret[x .. '-' .. z] then
 									ret[x .. '-' .. z] = {unitDefID = -order.id, x=x, y=y, z=z, queued = true}
@@ -244,34 +302,21 @@ local function GetQueuedFactories()
 end
 
 
-local function GetClosestFactory(x, z, unitDefID)
+local function GetClosestFactory(x, z, unitDefID, includeQueued)
 	local nearID, nearDistSq, nearData, isQueued
-	-- if building a specific factory
-	local allfacs = GetQueuedFactories()
-	for unitID, data in IterableMap.Iterator(factories) do
-		allfacs[unitID] = data
-	end
-	if unitDefID then
-		for unitID, data in pairs(allfacs) do
-			if data.unitDefID == unitDefID then
+	UpdateQueuedFactories()
+	for _, t in pairs{factories.dataByKey, queuedFactories} do
+		for unitID, data in pairs(t) do
+			if not unitDefID or data.unitDefID == unitDefID then
 				local dSq = DistSq(x, z, data.x, data.z)
 				if (not nearDistSq) or (dSq < nearDistSq) then
-					nearID = unitID
-					nearDistSq = dSq
-					nearData = data
-					isQueued = data.queued
+					if not data.queued or includeQueued then
+						nearID = unitID
+						nearDistSq = dSq
+						nearData = data
+						isQueued = data.queued
+					end
 				end
-			end
-		end
-	-- otherwise if using CMD_BUILD_PLATE
-	else
-		for unitID, data in pairs(allfacs) do
-			local dSq = DistSq(x, z, data.x, data.z)
-			if (not nearDistSq) or (dSq < nearDistSq) then
-				nearID = unitID
-				nearDistSq = dSq
-				nearData = data
-				isQueued = data.queued
 			end
 		end
 	end
@@ -303,66 +348,89 @@ local function GetMousePos(ignoreWater)
 	return mouse[1], mouse[3]
 end
 
-local function CheckTransformPlateIntoFactory(plateDefID, shift)
+local function CheckTransformPlateIntoFactory(plateDefID, shift, reverse)
 	local mx, mz = GetMousePos(not floatOnWater[plateDefID])
 	if not mx then
 		return
 	end
 	
-	local factoryDefID = childOfFactory[plateDefID]
+	local factoryDefID = facOfPlate[plateDefID]
 	mx, mz = SnapBuildToGrid(mx, mz, plateDefID) -- Make sure the plate is in range when it is placed
-	local unitID, distSq, factoryData, isQueued = GetClosestFactory(mx, mz, factoryDefID)
-	if not unitID or isQueued and not shift then
-		local cmdName = select(4, spGetActiveCommand())
-		if cmdName and ('buildunit_'..cmdName) == buildAction[plateDefID] then
+	local unitID, distSq, factoryData, isQueued = GetClosestFactory(mx, mz, factoryDefID, shift)
+	-- Echo("isQueued , shift is ", isQueued, shift)
+	if not unitID then
+		closestFactoryData = nil
+		if not reverse then
 			spSetActiveCommand(buildAction[factoryDefID])
+			return true
 		end
-		return
 	end
+	-- if not unitID or isQueued and shift then
+	-- 	-- local cmdName = select(4, spGetActiveCommand())
+	-- 	-- if cmdName and ('buildunit_'..cmdName) == buildAction[plateDefID] then
+	-- 	-- 	spSetActiveCommand(buildAction[factoryDefID])
+	-- 	-- end
+	-- 	-- Echo('returned')
+	-- 	return
+	-- end
 	closestFactoryData = factoryData
-	if distSq >= FACTORY_RANGE_SQ then
+	-- Echo('checking', math.round(os.clock()))
+	local switch = reverse == (distSq and distSq < FACTORY_RANGE_SQ)
+
+	if switch then
 		spSetActiveCommand(buildAction[factoryDefID])
+		return true
 	end
-	return true
 end
 
 
 
-local function CheckTransformFactoryIntoPlate(factoryDefID, shift)
+local function CheckTransformFactoryIntoPlate(factoryDefID, shift, reverse)
 	local mx, mz = GetMousePos(not floatOnWater[factoryDefID])
 	if not mx then
 		return
 	end
-	local plateDefID = parentOfPlate[factoryDefID]
+	local plateDefID = plateOfFac[factoryDefID]
 	mx, mz = SnapBuildToGrid(mx, mz, plateDefID) -- Make sure the plate is in range when it is placed
-	local unitID, distSq, factoryData, isQueued = GetClosestFactory(mx, mz, factoryDefID)
-	
+	local unitID, distSq, factoryData, isQueued = GetClosestFactory(mx, mz, factoryDefID, shift)
 	if not unitID then
+		closestFactoryData = nil
+		if reverse then
+			spSetActiveCommand(buildAction[plateDefID])
+			return true
+		end
 		return
 	end
 	
 	-- Plates could be disabled by modoptions or otherwise unavailible.
-	local cmdDescID = Spring.GetCmdDescIndex(-plateDefID)
+	local cmdDescID = spGetCmdDescIndex(-plateDefID)
 	if not cmdDescID then
 		return
 	end
-	
-	closestFactoryData = factoryData
-	if distSq < FACTORY_RANGE_SQ and plateDefID then
 
-		if not isQueued or shift then
-			spSetActiveCommand(buildAction[plateDefID])
-			return true
-		else 
-			local cmdName = select(4, spGetActiveCommand())
-			if cmdName and ('buildunit_'..cmdName) == buildAction[plateDefID] then
-				spSetActiveCommand(buildAction[factoryDefID])
-			end
-		end
+	closestFactoryData = factoryData
+
+	local switch = reverse == (distSq > FACTORY_RANGE_SQ)
+
+	if switch then
+		spSetActiveCommand(buildAction[plateDefID])
+		return true
 	end
 	return
 end
 
+local function CheckInRange()
+	local mx, mz = GetMousePos(not floatOnWater[factoryDefID])
+	if not mx then
+		return
+	end
+	local plateDefID = plateOfFac[factoryDefID]
+	mx, mz = SnapBuildToGrid(mx, mz, plateDefID) -- Make sure the plate is in range when it is placed
+	local unitID, distSq, factoryData, isQueued = GetClosestFactory(mx, mz, factoryDefID)
+	if not unitID then
+		return
+	end
+end
 local function MakePlateFromCMD()
 	local mx, mz = GetMousePos()
 	if not mx then
@@ -375,7 +443,7 @@ local function MakePlateFromCMD()
 	end
 
 	local factoryDefID = spGetUnitDefID(unitID)
-	local plateDefID = parentOfPlate[factoryDefID]
+	local plateDefID = plateOfFac[factoryDefID]
 	if not floatOnWater[plateDefID] and Spring.GetGroundHeight(mx, mz) < 0 then
 		mx, mz = GetMousePos(true)
 		if not mx then
@@ -386,7 +454,7 @@ local function MakePlateFromCMD()
 			return
 		end
 		factoryDefID = spGetUnitDefID(unitID)
-		plateDefID = parentOfPlate[factoryDefID]
+		plateDefID = plateOfFac[factoryDefID]
 		if floatOnWater[plateDefID] then
 			return
 		end
@@ -394,7 +462,7 @@ local function MakePlateFromCMD()
 
 	mx, mz = SnapBuildToGrid(mx, mz, plateDefID) -- Make sure the plate is in range when it is placed
 	-- Plates could be disabled by modoptions or otherwise unavailable.
-	local cmdDescID = Spring.GetCmdDescIndex(-plateDefID)
+	local cmdDescID = spGetCmdDescIndex(-plateDefID)
 	if not cmdDescID then
 		return
 	end
@@ -417,12 +485,19 @@ local function ResetInterface()
 end
 
 local spGetModKeyState = Spring.GetModKeyState
-
+-- if not Spring.__oriSetActiveCommand then
+-- 	Spring.__oriSetActiveCommand = Spring.SetActiveCommand
+-- 	Spring.SetActiveCommand = function(...)
+-- 		Echo(math.round(os.clock()),...)
+-- 		return Spring.__oriSetActiveCommand(...)
+-- 	end
+-- end
 function widget:Update()
 	local _, cmdID = spGetActiveCommand()
 	buildPlateCommand = cmdID and ((CMD_BUILD_PLATE == cmdID) or (cmdPlateDefID))
 	
 	if (buildFactoryDefID or cmdFactoryDefID or closestFactoryData) and CMD_BUILD_PLATE ~= cmdID then
+		-- Echo('reset', math.round(os.clock()))
 		ResetInterface()
 	end
 
@@ -441,24 +516,32 @@ function widget:Update()
 			end
 			return
 		else
-			if activeCmdOverride then
-				if (unitDefID == buildFactoryDefID or unitDefID == buildPlateDefID) then
-					return
-				end
-				activeCmdOverride = nil
+			-- Echo(unitDefID, unitDefID == buildFactoryDefID and 'build Fac' or unitDefID == buildPlateDefID and 'build Plate', activeCmdOverride and 'Override')	
+			if select(3, spGetMouseState()) then
+				return
 			end
-			local shift = select(4,spGetModKeyState())
-			if parentOfPlate[unitDefID] then
+			local ctrl,_,shift = select(2,spGetModKeyState())
+			if options.ctrl_use.value == '2' or WG.InitialQueue then
+				reverse = ctrl
+			end
+			-- Echo(plateOfFac[unitDefID] and 'fac' or facOfPlate[unitDefID] and 'plate')
+			if plateOfFac[unitDefID] then
 				buildFactoryDefID = unitDefID
-				buildPlateDefID = parentOfPlate[unitDefID]
-				CheckTransformFactoryIntoPlate(unitDefID, shift)
-				return
-			end
-			if childOfFactory[unitDefID] then
-				buildFactoryDefID = childOfFactory[unitDefID]
+				buildPlateDefID = plateOfFac[unitDefID]
+				-- Echo('check in to plate', math.round(os.clock()))
+				if CheckTransformFactoryIntoPlate(unitDefID, shift, reverse) then
+					-- Echo(Spring.GetActiveCommand())
+				end
+			elseif facOfPlate[unitDefID] then
+				buildFactoryDefID = facOfPlate[unitDefID]
 				buildPlateDefID = unitDefID
-				CheckTransformPlateIntoFactory(unitDefID, shift)
-				return
+				-- Echo('check into fac', math.round(os.clock()))
+				if CheckTransformPlateIntoFactory(unitDefID, shift, reverse) then
+					-- Echo(Spring.GetActiveCommand())
+				end
+			end
+			if options.ctrl_use.value == '2' then
+				reverse = false
 			end
 		end
 	end
@@ -475,18 +558,11 @@ function widget:KeyPress(key, mods, isRepeat, label, unicode)
 	if not (buildFactoryDefID and buildPlateDefID) then
 		return
 	end
-	if not (options.ctrl_toggle.value and (key == KEYSYMS.LCTRL or key == KEYSYMS.RCTRL)) then
+
+	if not (options.ctrl_use.value == '1' and (key == KEYSYMS.LCTRL or key == KEYSYMS.RCTRL)) then
 		return
 	end
-	
-	activeCmdOverride = true
-	local _, cmdID = spGetActiveCommand()
-	local unitDefID = -cmdID
-	if unitDefID == buildFactoryDefID then
-		spSetActiveCommand(buildAction[buildPlateDefID])
-	else
-		spSetActiveCommand(buildAction[buildFactoryDefID])
-	end
+	reverse = not reverse
 	return true
 end
 
@@ -495,7 +571,7 @@ end
 
 
 function widget:UnitCreated(unitID, unitDefID)
-	if not (parentOfPlate[unitDefID] and Spring.GetUnitAllyTeam(unitID) == myAllyTeamID) then
+	if not (plateOfFac[unitDefID] and Spring.GetUnitAllyTeam(unitID) == myAllyTeamID) then
 		return
 	end
 	local x,y,z = Spring.GetUnitPosition(unitID)
@@ -508,7 +584,7 @@ function widget:UnitCreated(unitID, unitDefID)
 end
 
 function widget:UnitDestroyed(unitID, unitDefID, teamID)
-	if not parentOfPlate[unitDefID] then
+	if not plateOfFac[unitDefID] then
 		return
 	end
 	IterableMap.Remove(factories, unitID)
@@ -524,7 +600,7 @@ end
 
 function widget:Initialize()
 	IterableMap.Clear(factories)
-	
+	gamePaused = select(3,Spring.GetGameSpeed())
 	local units = Spring.GetAllUnits()
 	for i = 1, #units do
 		local unitID = units[i]
@@ -603,19 +679,25 @@ function widget:DrawInMiniMap(minimapX, minimapY)
 	end
 	
 	local drawn = false
-	for unitID, data in IterableMap.Iterator(factories) do
-		if buildPlateCommand or data.unitDefID == buildFactoryDefID then
-			drawn = true
-			local drawDef = GetDrawDef(mx, mz, data)
-			if buildPlateCommand and drawPlateDefID and data.unitDefID ~= drawFactoryDefID then
-				inRange = false
-				drawDef = outCircle
+	for _, t in pairs{factories.dataByKey, queuedFactories} do
+		for unitID, data in pairs(t) do
+			if buildPlateCommand or data.unitDefID == buildFactoryDefID then
+				drawn = true
+				local drawDef, inRange
+				if data == closestFactoryData and DistSq(mx, mz, data.x, data.z) < FACTORY_RANGE_SQ then
+					drawDef, inRange = inCircle, true
+				else
+					drawDef, inRange = outCircle, false
+				end
+				if buildPlateCommand and drawPlateDefID and data.unitDefID ~= drawFactoryDefID then
+					inRange = false
+					drawDef = outCircle
+				end
+				
+				glLineWidth(drawDef.miniWidth)
+				glColor(drawDef.color[1], drawDef.color[2], drawDef.color[3], drawDef.color[4])
+				glDrawCircle(data.x, data.z, drawDef.range)
 			end
-			
-			glLineWidth(drawDef.miniWidth)
-			glColor(drawDef.color[1], drawDef.color[2], drawDef.color[3], drawDef.color[4])
-			
-			glDrawCircle(data.x, data.z, drawDef.range)
 		end
 	end
 	
@@ -646,30 +728,39 @@ function widget:DrawWorld()
 	end
 	
 	local drawInRange = false
+
 	if drawFactoryDefID or buildPlateCommand then
 		if not buildPlateCommand then
 			mx, mz = SnapBuildToGrid(mx, mz, drawPlateDefID)
 		end
 		
 		local drawn = false
-		for unitID, data in IterableMap.Iterator(factories) do
-			if buildPlateCommand or data.unitDefID == drawFactoryDefID then
-				drawn = true
-				local drawDef, inRange = GetDrawDef(mx, mz, data)
-				if buildPlateCommand and drawPlateDefID and data.unitDefID ~= drawFactoryDefID then
-					inRange = false
-					drawDef = outCircle
+		for _, t in pairs{factories.dataByKey, queuedFactories} do
+			for unitID, data in pairs(t) do
+				if buildPlateCommand or data.unitDefID == drawFactoryDefID then
+					drawn = true
+					local drawDef, inRange
+					if data == closestFactoryData and DistSq(mx, mz, data.x, data.z) < FACTORY_RANGE_SQ then
+						drawDef, inRange = inCircle, true
+					else
+						drawDef, inRange = outCircle, false
+					end
+					-- Echo('not in range',buildPlateCommand and drawPlateDefID and data.unitDefID ~= drawFactoryDefID)
+					if buildPlateCommand and drawPlateDefID and data.unitDefID ~= drawFactoryDefID then
+						inRange = false
+						drawDef = outCircle
+					end
+					drawInRange = drawInRange or inRange
+					
+					gl.DepthTest(false)
+					glLineWidth(drawDef.width)
+					glColor(drawDef.color[1], drawDef.color[2], drawDef.color[3], drawDef.color[4])
+					
+					glDrawGroundCircle(data.x, data.y, data.z, drawDef.range, drawDef.circleDivs)
 				end
-				drawInRange = drawInRange or inRange
-				
-				gl.DepthTest(false)
-				glLineWidth(drawDef.width)
-				glColor(drawDef.color[1], drawDef.color[2], drawDef.color[3], drawDef.color[4])
-				
-				glDrawGroundCircle(data.x, data.y, data.z, drawDef.range, drawDef.circleDivs)
 			end
 		end
-		
+
 		if drawn then
 			glLineStipple(false)
 			glLineWidth(1)
