@@ -3,14 +3,14 @@
 
 function widget:GetInfo()
   return {
-    name      = "Unit Start State",
-    desc      = "Configurable starting unit states for units",
-    author    = "GoogleFrog",
-    date      = "13 April 2011", --last update: 29 January 2014
-    license   = "GNU GPL, v2 or later",
+	name      = "Unit Start State",
+	desc      = "Configurable starting unit states for units",
+	author    = "GoogleFrog",
+	date      = "13 April 2011", --last update: 29 January 2014
+	license   = "GNU GPL, v2 or later",
 	handler   = false,
-    layer     = 1,
-    enabled   = true,  --  loaded by default?
+	layer     = 1,
+	enabled   = true,  --  loaded by default?
   }
 end
 local Echo = Spring.Echo
@@ -19,7 +19,7 @@ local Echo = Spring.Echo
 
 VFS.Include("LuaRules/Configs/customcmds.h.lua")
 
-local overkillPrevention, overkillPreventionBlackHole = include("LuaRules/Configs/overkill_prevention_defs.lua")
+local overkillPrevention, overkillPreventionBlackHole, _, overkillPreventionLobster = include("LuaRules/Configs/overkill_prevention_defs.lua")
 local baitPreventionDefault = include("LuaRules/Configs/bait_prevention_defs.lua")
 local alwaysHoldPos, holdPosException, dontFireAtRadarUnits, factoryDefs = VFS.Include("LuaUI/Configs/unit_state_defaults.lua")
 local defaultSelectionRank = VFS.Include(LUAUI_DIRNAME .. "Configs/selection_rank.lua")
@@ -33,6 +33,19 @@ local unitsToFactory = {} -- [unitDefName] = factoryDefName
 local preventBaitTip = "\nAvoidance is disabled for units with Force Fire (only for the target), Attack Move or Patrol commands."
 local badTargetDescStr = "\n\nAvoid Bad Targets prevents auto-aim at low value targets. It is disabled for units with Force Fire (only for the target), Attack Move or Patrol commands. The lowest level avoids armoured targets (excluding Crab) while levels Light to Heavy ignore unidentified radar dots."
 
+local blueprintCopyDefaults = {
+	{[[factoryplane]],   2},
+	{[[factoryamph]],    2},
+	{[[factorycloak]],   2},
+	{[[factorygunship]], 4},
+	{[[factoryhover]],   2},
+	{[[factoryjump]],    3},
+	{[[factoryveh]],     3},
+	{[[factoryshield]],  3},
+	{[[factoryship]],    3},
+	{[[factoryspider]],  4},
+	{[[factorytank]],    2},
+}
 
 local tooltipFunc = {}
 local tooltips = {
@@ -101,6 +114,12 @@ local tooltips = {
 		[3] = "Avoid shooting at units costing less than 240 (excluding Stardust) as well as, Raptor, unknown radar dots, low value nanoframes and armoured targets (excluding Crab). Disables Ward Fire." .. preventBaitTip,
 		[4] = "Avoid shooting at  units costing less than 420, unknown radar dots, low value nanoframes and armoured targets (excluding Crab). Disables Ward Fire." .. preventBaitTip,
 	},
+	overkill_prevention = {
+		[0] = "Disabled.",
+		[1] = "Enabled only for automatically aquired targets when set to Fire At Will.",
+		[2] = "Enabled when the unit is set to Fire At Will.",
+		[3] = "Always enabled.",
+	},
 	fire_at_shield = {
 		[0] = "Disabled.",
 		[1] = "Shoot at the shields of Thugs, Felons and Convicts when nothing else is in range.",
@@ -161,6 +180,7 @@ options_order = {
 	'commander_auto_call_transport_2',
 	'commander_selection_rank',
 	'commander_formation_rank',
+    'commander_blueprint_copy_text',
 }
 
 options = {
@@ -220,7 +240,7 @@ options = {
 				local find = string.find(opt, "_movestate1")
 				local name = find and string.sub(opt,0,find-1)
 				local ud = name and UnitDefNames[name]
-				if ud and (string.match(ud.tooltip, 'Skirm') or string.match(ud.tooltip, 'Capture') or string.match(ud.tooltip, 'Black Hole')) and IsGround(ud) then
+				if ud and (string.match(ud.description, 'Skirm') or string.match(ud.description, 'Capture') or string.match(ud.description, 'Black Hole')) and IsGround(ud) then
 					options[opt].value = 0
 				end
 			end
@@ -238,7 +258,7 @@ options = {
 				local find = string.find(opt, "_movestate1")
 				local name = find and string.sub(opt,0,find-1)
 				local ud = name and UnitDefNames[name]
-				if ud and string.match(ud.tooltip, 'Arti') and IsGround(ud) then
+				if ud and string.match(ud.description, 'Arti') and IsGround(ud) then
 					options[opt].value = 0
 				end
 			end
@@ -256,7 +276,7 @@ options = {
 				local find = string.find(opt, "_movestate1")
 				local name = find and string.sub(opt,0,find-1)
 				local ud = name and UnitDefNames[name]
-				if ud and string.match(ud.tooltip, 'Anti') and string.match(ud.tooltip, 'Air') and IsGround(ud) then
+				if ud and string.match(ud.description, 'Anti') and string.match(ud.description, 'Air') and IsGround(ud) then
 					options[opt].value = 0
 				end
 			end
@@ -608,18 +628,56 @@ options = {
 		tooltipFunction = tooltipFunc.selectionrank,
 	},
 
-	commander_formation_rank = {
-		name = "  Formation Rank",
-		desc = "Formation Rank: units of lower rank line up in front of units of higher rank when given line movement orders.",
-		type = 'number',
-		value = 2,
-		min = 0,
-		max = 3,
-		step = 1,
-		path = "Settings/Unit Behaviour/Default States/Misc",
-		tooltipFunction = tooltipFunc.formationrank,
-	},
+    commander_formation_rank = {
+        name = "  Formation Rank",
+        desc = "Formation Rank: units of lower rank line up in front of units of higher rank when given line movement orders.",
+        type = 'number',
+        value = 2,
+        min = 0,
+        max = 3,
+        step = 1,
+        path = "Settings/Unit Behaviour/Default States/Misc",
+        tooltipFunction = tooltipFunc.formationrank,
+    },
+    
+    commander_blueprint_copy_text = {
+        name = 'Enginner Plop Blueprint Copy',
+        type = 'text',
+        value = "Engineer commanders automatically copy a build option from the factory they plop at the start of the game. The default can be changed below. Also, blueprints can be changed during the game with the Copy Factory Blueprint command.",
+        path = "Settings/Unit Behaviour/Default States/Misc/Blueprint",
+    },
 }
+
+do
+    for i = 1, #blueprintCopyDefaults do
+        local factoryName = blueprintCopyDefaults[i][1]
+        local defaultBuildIndex = blueprintCopyDefaults[i][2]
+        local ud = UnitDefNames[factoryName]
+        if ud then
+            local buildList = ud.buildOptions
+            local defName = "blueprint_copy_" .. factoryName
+            local items = {}
+            local default
+            for j = 1, #buildList do
+                local bud = UnitDefs[buildList[j]]
+                if bud then
+                    items[#items + 1] = {key = bud.name, name = Spring.Utilities.GetHumanName(bud)}
+                    if #items == defaultBuildIndex then
+                        default = bud.name
+                    end
+                end
+            end
+            options[defName] = {
+                name = Spring.Utilities.GetHumanName(ud),
+                type = 'radioButton',
+                items = items,
+                value = default,
+                path = "Settings/Unit Behaviour/Default States/Misc/Blueprint",
+            }
+            options_order[#options_order+1] = defName
+        end
+    end
+end
 
 local tacticalAIUnits = {}
 local wardFireUnits = {}
@@ -950,16 +1008,23 @@ local function addUnit(defName, path)
 		options_order[#options_order+1] = defName .. "_fire_at_radar"
 	end
 
-	if overkillPrevention[unitDefID] or overkillPreventionBlackHole[unitDefID] then
-		options[defName .. "_overkill_prevention"] = {
-			name = "  Overkill Prevention",
-			desc = "Check box to make these units avoid firing at targets that are already likely to die due to incoming fire.",
-			type = 'bool',
-			value = true,
-			path = path,
-		}
-		options_order[#options_order+1] = defName .. "_overkill_prevention"
-	end
+    local overkillPrevention = overkillPrevention[unitDefID] or overkillPreventionBlackHole[unitDefID] or overkillPreventionLobster[unitDefID]
+    if overkillPrevention then
+        options[defName .. "_overkill_prevention0"] = {
+            name = "  Overkill Prevention",
+            desc = "Control when the unit tries to prevent overkill. This is done by not shooting at units that are already likely to die due to incoming fire.",
+            type = 'number',
+            value = overkillPrevention,
+            min = 0,
+            max = 3,
+            step = 1,
+            path = path,
+            tooltipFunction = tooltipFunc.overkill_prevention,
+        }
+
+        options_order[#options_order+1] = defName .. "_overkill_prevention0"
+    end
+
 
 	if wardFireUnits[defName] then
 		local def = wardFireUnits[defName]
@@ -1036,16 +1101,17 @@ local function addUnit(defName, path)
 		end
 	end
 	
-	if ud.customParams.attack_toggle then
-		options[defName .. "_disableattack"] = {
-			name = "  Disable Attack Commands",
-			desc = "Check the box to make the unit not respond to attack commands.",
-			type = 'bool',
-			value = false,
-			path = path,
-		}
-		options_order[#options_order+1] = defName .. "_disableattack"
-	end
+    if ud.customParams.attack_toggle then
+        options[defName .. "_enableattack_1"] = {
+            name = "  Enable Force Fire Command",
+            desc = "Make the unit respond to Force Fire commands as well as Fire Special Weapon.",
+            type = 'bool',
+            value = false,
+            path = path,
+        }
+
+        options_order[#options_order+1] = defName .. "_enableattack_1"
+    end
 	
 	if ud.canStockpile then
 		options[defName .. "_stockpile"] = {
@@ -1213,6 +1279,33 @@ local function StockpileUnit(unitID, wanted, orderArray)
 	end
 end
 
+local function CheckBlueprintDefault(unitID, unitDefID, ud, builderID)
+    local _,_,inbuild = Spring.GetUnitIsStunned(unitID)
+    if inbuild then
+        return
+    end
+    local builderDefID = Spring.GetUnitDefID(builderID)
+    local bud = builderDefID and UnitDefs[builderDefID]
+    if not bud and bud.customParams.field_factory then
+        return
+    end
+    local confValue = options["blueprint_copy_" .. ud.name]
+    confValue = confValue and confValue.value
+    if not confValue then
+        return
+    end
+    local copyId = UnitDefNames[confValue]
+    copyId = copyId and copyId.id
+    if not copyId then
+        return
+    end
+    if Spring.GetUnitRulesParam(builderID, "fieldFactoryUnit") then
+        return
+    end
+    Spring.GiveOrderToUnit(builderID, CMD_FIELD_FAC_QUEUELESS, {unitID, copyId}, 0)
+end
+
+
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
 
@@ -1232,7 +1325,7 @@ function widget:UnitCreated(unitID, unitDefID, unitTeam, builderID)
 	local ud = UnitDefs[unitDefID]
 	local orderArray = {}
 	if ud.customParams.commtype or ud.customParams.level then
-		local morphed = Spring.GetTeamRulesParam(unitTeam, "morphUnitCreating") == 1
+		local morphed = Spring.GetGameRulesParam("morphUnitCreating") == 1
 		if morphed then
 			-- Gadget and Spring unit states are applied in unit_morph gadget. Widget unit
 			-- states are handled by their widget.
@@ -1253,6 +1346,10 @@ function widget:UnitCreated(unitID, unitDefID, unitTeam, builderID)
 			WG.SetFormationRank(unitID, options.commander_formation_rank.value)
 		end
 	end
+
+    if ud.isFactory and builderID then
+        CheckBlueprintDefault(unitID, unitDefID, ud, builderID)
+    end
 
 	local name = ud.name
 	if unitAlreadyAdded[name] then
@@ -1416,11 +1513,11 @@ function widget:UnitCreated(unitID, unitDefID, unitTeam, builderID)
 			orderArray[#orderArray + 1] = {CMD_FIRE_TOWARDS_ENEMY, {(value and 1) or 0}, CMD.OPT_SHIFT}
 		end
 		
-		value = GetStateValue(name, "disableattack")
-		if value then -- false is the default
-			orderArray[#orderArray + 1] = {CMD_DISABLE_ATTACK, {1}, CMD.OPT_SHIFT}
-		end
-
+        value = GetStateValue(name, "enableattack_1")
+        if value then
+            orderArray[#orderArray + 1] = {CMD_DISABLE_ATTACK, {0}, CMD.OPT_SHIFT}
+        end
+        
 		value = GetStateValue(name, "formation_rank")
 		if value and WG.SetFormationRank then
 			WG.SetFormationRank(unitID, value)
@@ -1490,7 +1587,7 @@ function widget:UnitFromFactory(unitID, unitDefID, unitTeam, factID, factDefID, 
 end
 
 function widget:UnitFinished(unitID, unitDefID, unitTeam)
-	if not AmITeamLeader (unitTeam) or not unitDefID or not UnitDefs[unitDefID] or (Spring.GetTeamRulesParam(unitTeam, "morphUnitCreating") == 1) then
+	if not AmITeamLeader (unitTeam) or not unitDefID or not UnitDefs[unitDefID] or (Spring.GetGameRulesParam("morphUnitCreating") == 1) then
 		return
 	end
 
