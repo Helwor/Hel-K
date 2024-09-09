@@ -389,7 +389,9 @@ local format 			= string.format
 -- end
 
 
-local g = {}
+local g = {
+	noterra = not Game.mapDamage,
+}
 
 local PBH
 
@@ -1868,7 +1870,7 @@ local judge = (function() -- TODO: can be bettered to finetune the space between
 		['onGrid']=function(dist,x,z)
 		local lasp=specs[specs.n]
 		local llasp=specs[specs.n-1]
-			if lasp.status=='connect' and IsInRadius(x,z,p.radius,nil,llasp) and not TestBuild(x,z,p,not WG.PBHisListening,placed,overlapped)
+			if lasp.status=='connect' and IsInRadius(x,z,p.radius,nil,llasp) and not TestBuild(x,z,p,(not WG.PBHisListening or g.noterra),placed,overlapped)
 				then status='connect'
 				return 'replace'
 			else
@@ -2576,7 +2578,7 @@ local function PoseOnRail()
 			rx = floor((rx + 8 - oddx)/16)*16 + oddx
 			rz = floor((rz + 8 - oddz)/16)*16 + oddz
 
-			local overlap,_,_,overlapPlacement = TestBuild(rx,rz,p,not PBH,placed,overlapped,specs)
+			local overlap,_,_,overlapPlacement = TestBuild(rx,rz,p,not PBH or g.noterra,placed,overlapped,specs)
 			if not overlap and not overlapPlacement then
 				r = a
 				n=n+1
@@ -3194,7 +3196,7 @@ do
 				z=z+dirz*16
 				local rx = floor((x + 8 - oddx)/16)*16 + oddx
 				local rz = floor((z + 8 - oddz)/16)*16 + oddz
-				local cantPlace,_,closest = TestBuild(rx,rz,p,not PBH,placed,overlapped)
+				local cantPlace,_,closest = TestBuild(rx,rz,p,not PBH or g.noterra,placed,overlapped)
 				if cantPlace and closest then 
 					rx,rz = PushOut(rx,rz,sx,sz,x,z,closest,p)
 				end
@@ -3218,7 +3220,7 @@ do
 			-- the next point is at perfect distance but hasnt been updated, adding the missing keys
 			elseif not rail[j].rx then
 				local rx,rz = rail[j][1],rail[j][3]
-				local cantPlace,_,closest = TestBuild(rx,rz,p,not PBH,placed,overlapped)
+				local cantPlace,_,closest = TestBuild(rx,rz,p,not PBH or g.noterra,placed,overlapped)
 				if cantPlace and closest then 
 					rx,rz = PushOut(rx,rz,sx,sz,x,z,closest,p)
 				end
@@ -3253,7 +3255,7 @@ local function Init()
 	specs:clear()
 
 	WG.drawingPlacement = specs
-	local hasOverlap = TestBuild(x,z,p,not PBH,placed,overlapped)
+	local hasOverlap = TestBuild(x,z,p,not PBH or g.noterra,placed,overlapped)
 	if not hasOverlap and status~='paint_farm' then
 		specs[1]={x,z,r=1}
 		specs.n=1
