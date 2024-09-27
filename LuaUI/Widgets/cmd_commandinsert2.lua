@@ -26,7 +26,6 @@ local correctAfter = false
 local reorderSequence = false
 --
 
-
 local debugCache = false
 
 if reorderSequence then
@@ -143,7 +142,9 @@ local function SwitchToOld(on)
 			Echo("Old CommandInsert doesn't exist")
 			return
 		end
-		if not widget.sleeping then
+		if widgetHandler.Sleep then
+			widgetHandler:Sleep(widget, {PlayerChanged = true})
+		elseif not widget.sleeping then
 			local sleeping = false
 			for k,v in pairs(widget) do
 				if type(v) == 'function' and k~='PlayerChanged' then
@@ -160,6 +161,7 @@ local function SwitchToOld(on)
 			end
 		end
 		WG.CommandInsert = oldWGCommandInsert
+		WG.CommandInsertV2 = false
 		if not oldActive then
 			Echo('Enabling CommandInsert')
 			widgetHandler:EnableWidget('CommandInsert')
@@ -170,7 +172,9 @@ local function SwitchToOld(on)
 			Echo('Disabling CommandInsert to be replaced by ' .. widget:GetInfo().name)
 			widgetHandler:RemoveWidget(CI)
 		end
-		if widget.sleeping then
+		if widgetHandler.Wake then
+			widgetHandler:Wake(widget)
+		elseif widget.sleeping then
 			local sleeping = true
 			for k,v in pairs(widget) do
 				if type(v) == 'function' and k~='PlayerChanged' then
@@ -188,6 +192,7 @@ local function SwitchToOld(on)
 			end
 		end
 		WG.CommandInsert = CommandInsert
+		WG.CommandInsertV2 = true
 
 	end
 	return true
@@ -270,7 +275,8 @@ options.debug = {
 		elseif not options.debugdraw.value then
 			CMDNAMES = setmetatable({}, {__index = function(t,k) SetupCMDNAMES() return CMDNAMES[k] end })
 		end
-	end
+	end,
+	dev = true,
 }
 options.debugdraw = {
 	name = 'Draw Debug',
@@ -285,8 +291,9 @@ options.debugdraw = {
 		elseif not options.debug.value then
 			CMDNAMES = setmetatable({}, {__index = function(t,k) SetupCMDNAMES() return CMDNAMES[k] end })
 		end
+	end,
+	dev = true,
 
-	end
 }
 options.correct = {
 	name = 'Correct queue afterward',
@@ -296,6 +303,7 @@ options.correct = {
 	OnChange = function(self)
 		correctAfter = self.value
 	end,
+	dev = true,
 }
 options.reorder_seq = {
 	name = 'Reorder Sequence',
@@ -305,6 +313,7 @@ options.reorder_seq = {
 	OnChange = function(self)
 		reorderSequence = self.value and {}
 	end,
+	dev = true,
 }
 VFS.Include("LuaRules/Configs/customcmds.h.lua")
 
@@ -343,7 +352,10 @@ local CMD_RECLAIM	= CMD.RECLAIM
 local maxUnits = Game.maxUnits
 
 local sqrt = math.sqrt
-
+local radDefID = {}
+for defID, def in pairs(UnitDefs) do
+	radDefID[defID] = def.radius or 0
+end
 
 local positionCommand = {
 	[CMD.MOVE] = true,
@@ -352,7 +364,8 @@ local positionCommand = {
 	[CMD_REPAIR] = true,
 	[CMD.RECLAIM] = true,
 	[CMD_RESURRECT] = true,
-	[CMD.MANUALFIRE] = true,
+    [CMD.MANUALFIRE] = true,
+    [CMD_AIR_MANUALFIRE] = true,
 	[CMD_GUARD] = true,
 	[CMD.FIGHT] = true,
 	[CMD_ATTACK] = true,
@@ -705,7 +718,7 @@ local function QualifyCommands(commands, commands_len)
 end
 
 local function UpdateCommandsReach(commands, commands_len, buildDist, px,py,pz)
-	local reachBuild
+	local reachBuild = false
 	local command, i = GetPositionCommand(commands, 1)
 	if command then
 
@@ -741,7 +754,7 @@ local function UpdateCommandsReach(commands, commands_len, buildDist, px,py,pz)
 		elseif moveCommand[command.id] then
 			if not gamePaused then
 				local dist = ((command.params[1] - px)^2 + (command.params[3] - pz)^2)^0.5
-				if dist < 32 then
+				if dist < 32 then -- is it correct to change that ??
 					table.remove(commands,i)
 					commands_len = commands_len - 1
 					-- if debugMe then
@@ -755,25 +768,36 @@ local function UpdateCommandsReach(commands, commands_len, buildDist, px,py,pz)
 			end
 		elseif command.id < 0 then
 			local dist = ((command.params[1] - px)^2 + (command.params[3] - pz)^2)^0.5
-			if dist <= buildDist then
+			-- Echo(
+			-- 	"dist vs buildDist + radDefID["..-command.id.."] : " 
+			-- 	.. dist .. ' <= ' .. (buildDist + radDefID[-command.id]) 
+			-- 	.. ' ('.. buildDist ..' + '..radDefID[-command.id]..') => ' .. tostring(dist <= (buildDist + radDefID[-command.id]))
+			-- ) 
+			if dist <= (buildDist + radDefID[-command.id]) then
 				reachBuild = true
 				-- Echo('REACHBUILD')
 			end
 		elseif command.id == CMD_REPAIR then
 			local tx,ty,tz
+			local defID
 			if command.isTerra then
 				tx,ty,tz = unpack(command.pos)
 			else
 				local id = not command.params[2] and command.params[1]
 				if id then
-					cache[id] = cache[id] or {spGetUnitPosition(id)}
-					tx,ty,tz = unpack(cache[id])
+					local cached = cache[id]
+					if not cached then
+						cached = {defID = spGetUnitDefID(id) or 1, spGetUnitPosition(id)}
+						cache[id] = cached
+					end
+					tx,ty,tz = unpack(cached)
+					defID = cached.defID
 				end
 			end
 			if tx then
 				local dist = ((tx - px)^2 + (tz - pz)^2)^0.5
 				-- Echo("dist <= buildDist + 100 is ", dist , buildDist + 100)
-				if dist <= buildDist + 100 then
+				if dist <= (buildDist + (defID and radDefID[defID] or 0)) then -- FIXME arbitrary
 					reachBuild = true
 					-- Echo('REACH REPAIR')
 				end	
@@ -807,7 +831,7 @@ local function GetInsertionPoint(unitID,buildDist,isFlyingCon, id, cx,cy,cz, par
 			if gamePaused then
 				pingNow = 0.25
 			elseif askedPingF + 30 < frame then
-			 	pingNow = select(6,Spring.GetPlayerInfo(Spring.GetMyTeamID(), true))
+			 	pingNow = select(6,Spring.GetPlayerInfo(Spring.GetMyPlayerID(), true))
 			 	ping = pingNow
 			 	askedPingF = frame
 			else
@@ -821,7 +845,7 @@ local function GetInsertionPoint(unitID,buildDist,isFlyingCon, id, cx,cy,cz, par
 		commands.expected = {}
 		if pendingInsert then -- used by buffer method , unfinished work
 			local ins = math.min(#commands+1,pendingInsert[1]+1)
-			table.insert(commands,ins,{id=pendingInsert[2],options={coded=pendingInsert[3]},params={select(4,unpack(pendingInsert))}})
+			table.insert(commands, ins, { id = pendingInsert[2], options = {coded = pendingInsert[3]}, params = {select(4,unpack(pendingInsert))} })
 			if debugMe then
 				Echo('pendingInsert::::',CMDNAMES[pendingInsert[2]] .. ' ('..pendingInsert[2]..')'..' x'..pendingInsert[4] .. 'inserted at '..ins..'/'..#commands, '(ori ins pos: '..pendingInsert[1]..')')
 			end
@@ -905,7 +929,7 @@ local function GetInsertionPoint(unitID,buildDist,isFlyingCon, id, cx,cy,cz, par
 		-- end
 		local reachBuild
 		if not gamePaused then
-			-- remove RAW BUILD/ move command if our con has reached the range, getiformed about eaching the first command
+			-- remove RAW BUILD/ move command if our con has reached the range, get informed about eaching the first command
 			reachBuild, commands_len = UpdateCommandsReach(commands, commands_len, buildDist, px,py,pz)
 
 			--------------- remove RAW_BUILD that should expire by the time our order get received
@@ -924,7 +948,10 @@ local function GetInsertionPoint(unitID,buildDist,isFlyingCon, id, cx,cy,cz, par
 				-- 		table.remove(commands, i)
 				-- 		commands_len = commands_len-1
 				-- 		if debugMe then
-				-- 			Echo('[f'..frame..']:Removing expired RAW_BUILD x'..command.pos[1]..' , ('.. command.removeAt .. ')  at '..i..',  now length of queue is '.. commands_len,'estimated real removal:'..command.removeAt + commands.pingFrame)
+				-- 			Echo('[f'..frame..']:Removing expired RAW_BUILD x'..command.pos[1]..' 
+				--			, ('.. command.removeAt .. ')  at '..i..',
+				--			,  now length of queue is '.. commands_len
+				--			,'estimated real removal:'..command.removeAt + commands.pingFrame)
 				-- 		end
 				-- 	else
 				-- 		i = i + 1
@@ -1123,7 +1150,7 @@ local function GetInsertionPoint(unitID,buildDist,isFlyingCon, id, cx,cy,cz, par
 						elseif command.id < 0 then
 							local reachBuild
 							local dist = ((command.params[1] - px)^2 + (command.params[3] - pz)^2)^0.5
-							if dist <= buildDist then
+							if dist <= (buildDist + radDefID[-command.id]) then
 								reachBuild = true
 								if debugMe then
 									Echo('REACHBUILD')
@@ -1131,9 +1158,42 @@ local function GetInsertionPoint(unitID,buildDist,isFlyingCon, id, cx,cy,cz, par
 							end
 							if reachBuild then
 								dlen = min_dlen + 1 -- hack the dlen so the insert doesn't happen
-
 								if debugMe then
 									Echo("Build insertion is pushed after the current build")
+								end
+							end
+						elseif command.id == CMD_REPAIR then
+							local reachBuild
+							local tx,ty,tz
+							local defID
+							if command.isTerra then
+								tx,ty,tz = unpack(command.pos)
+							else
+								local id = not command.params[2] and command.params[1]
+								if id then
+									local cached = cache[id]
+									if not cached then
+										cached = {defID = spGetUnitDefID(id) or 1, spGetUnitPosition(id)}
+										cache[id] = cached
+									end
+									tx,ty,tz = unpack(cached)
+									defID = cached.defID
+								end
+							end
+							if tx then
+								local dist = ((tx - px)^2 + (tz - pz)^2)^0.5
+								-- Echo("dist, buildDist + defID, radDefID[defID] is ", dist, buildDist , radDefID[defID] or 0, dist, 'vs', (buildDist + (defID and radDefID[defID] or 0)))
+								if dist <= buildDist + (defID and radDefID[defID] or 0) then
+									reachBuild = true
+									if debugMe then
+										Echo('REACH REPAIR')
+									end
+								end	
+							end
+							if reachBuild then
+								dlen = min_dlen + 1 -- hack the dlen so the insert doesn't happen
+								if debugMe then
+									Echo("Build insertion is pushed after the current repair")
 								end
 							end
 						end
@@ -1273,7 +1333,7 @@ local function GetInsertionPoint(unitID,buildDist,isFlyingCon, id, cx,cy,cz, par
 				-- sx,sz = sx - 0.1, sz - 0.1
 
 				local type, id =  spGetGroundBlocked(cx-sx, cz-sz, cx+sx, cz+sz)
-				Echo(id)
+				-- Echo(id)
 				
 				isFeature = type == 'feature' and id
 				cache[params] = isFeature
@@ -1442,9 +1502,9 @@ local function ProcessCommand(id, params, options, sequence_order)
 			for _, unitID in ipairs(units) do
 				if useBuffer and waitOrder[unitID] then
 					buffer[unitID] = buffer[unitID] or {}
-					table.insert(buffer[unitID], {id, cx, cy, cz, params, coded, isAreaAttack,enemies, enemyCount})
+					table.insert(buffer[unitID], {id, cx, cy, cz, params, coded, isAreaAttack, enemies, enemyCount})
 				else
-					local insert_pos, commands = GetInsertionPoint(unitID, buildRange[defID],flyingConDefID[defID], id, cx, cy, cz, params, coded, now)
+					local insert_pos, commands = GetInsertionPoint(unitID, buildRange[defID], flyingConDefID[defID], id, cx, cy, cz, params, coded, now)
 					-- note that in case of an area attack, we account for the center of the area to define where it should be inserted, no matter where the enemy are in this area
 					if insert_pos then
 						local done
@@ -1920,7 +1980,7 @@ local function ProcessSequence()
 				sequence[unitID] = sequence[unitID] or {}
 				local seq = sequence[unitID]
 				for i, params in ipairs(raw_orders) do
-					local insert_pos,_, extra = GetInsertionPoint(unpack(params))
+					local insert_pos, _, extra = GetInsertionPoint(unpack(params))
 					if insert_pos then
 						local order = commands[insert_pos+extra+1]
 						table.insert(seq, order)
@@ -2000,6 +2060,10 @@ end
 
 
 local timer, count = 0, 0
+local sel = {}
+function widget:CommandsChanged()
+	sel = spGetSelectedUnits()
+end
 
 function widget:CommandNotify(id, params, options)
 	-- Echo(" is ", (CMDNAMES[id]) ..table.concat(params))
@@ -2008,7 +2072,7 @@ function widget:CommandNotify(id, params, options)
 	end
 
 	if id == CMD_STOP or not (options.shift or options.meta) then
-		for i, unitID in ipairs(spGetSelectedUnits()) do
+		for i, unitID in ipairs(sel) do
 			if queues[unitID] then
 				waitOrder[unitID], queues[unitID], timeOut[unitID] = nil, nil, nil
 				sequence[unitID] = nil
@@ -2018,19 +2082,20 @@ function widget:CommandNotify(id, params, options)
 			end
 		end
 		return
-	elseif id == CMD_RECLAIM and options.coded == CMD_OPT_META then
+	elseif id == CMD_RECLAIM and options.coded == CMD_OPT_META then 
+		-- fix in case of a current unit getting build that is ordered to be now reclaimed, the build order need to be removed or it will start again once the reclaim is finished
 		if params[1] and not params[2] then
 			local tgt = params[1]
 			if spValidUnitID(tgt) then
 				local tx, _, tz = spGetUnitPosition(tgt)
 				if tx then
-					for i, unitID in ipairs(spGetSelectedUnits()) do
+					for i, unitID in pairs(sel) do
 						local done
 						local queue = spGetCommandQueue(unitID,3)
 						for i, order in ipairs(queue) do
 							if order.id < 0 then
 								if order.params[1] == tx and order.params[3] == tz then
-									spGiveOrderToUnit(unitID, CMD_REMOVE,order.tag,0)
+									spGiveOrderToUnit(unitID, CMD_REMOVE, order.tag, 0)
 									done = true
 								end
 							end
@@ -2260,6 +2325,7 @@ end
 
 function widget:Initialize()
 	SwitchToOld(false)
+	widget:CommandsChanged()
 end
 function widget:Shutdown()
 	pcall(SwitchToOld, true, function() Spring.Echo('FAILED TO RELOAD OLD COMMAND INSERT') end)
