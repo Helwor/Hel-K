@@ -1,16 +1,3 @@
---------------------------------------------------------------------------------
---------------------------------------------------------------------------------
---
---  file:    unit_smart_nanos.lua
---  brief:   Enables auto reclaim & repair for idle turrets
---  author:  Owen Martindell
---
---  Copyright (C) 2008.
---  Licensed under the terms of the GNU GPL, v2 or later.
---
---------------------------------------------------------------------------------
---------------------------------------------------------------------------------
-
 function widget:GetInfo()
   return {
     name      = "Split Attack",
@@ -24,8 +11,9 @@ function widget:GetInfo()
   }
 
 -- TODO: when custom formation is not enabled, holding alt + right click on target attack the ground, which is not what we want
-
 end
+
+local activeByDefault = false
 -- speeds up
 local Echo = Spring.Echo
 
@@ -48,6 +36,7 @@ local spGetSelectedUnitsCount = Spring.GetSelectedUnitsCount
 local spGetMouseState = Spring.GetMouseState
 local spGetUnitRulesParam = Spring.GetUnitRulesParam
 local spGetSelectedUnitsSorted = Spring.GetSelectedUnitsSorted
+local spGetMyTeamID = Spring.GetMyTeamID
 -- local spGetUnitsInCylinder = Spring.GetUnitsInCylinder
 -- local spGetUnitsInRectangle = Spring.GetUnitsInRectangle
 local spIsUnitAllied = Spring.IsUnitAllied
@@ -55,29 +44,71 @@ local spIsUnitAllied = Spring.IsUnitAllied
 local CMD_INSERT, CMD_OPT_ALT, CMD_OPT_SHIFT, CMD_OPT_INTERNAL = CMD.INSERT, CMD.OPT_ALT, CMD.OPT_SHIFT, CMD.OPT_INTERNAL
 local CMD_MOVE, CMD_ATTACK, CMD_REMOVE = CMD.MOVE, CMD.ATTACK, CMD.REMOVE
 local CMD_GUARD = CMD.GUARD
-local customCmds = VFS.Include("LuaRules/Configs/customcmds.lua")
-local CMD_UNIT_CANCEL_TARGET = customCmds.UNIT_CANCEL_TARGET
-local CMD_UNIT_SET_TARGET = customCmds.UNIT_SET_TARGET
+-- local customCmds = VFS.Include("LuaRules/Configs/customcmds.lua")
+local CMD_UNIT_CANCEL_TARGET = Spring.Utilities.CMD.UNIT_CANCEL_TARGET
+local CMD_UNIT_SET_TARGET = Spring.Utilities.CMD.UNIT_SET_TARGET
+local CMD_RAW_MOVE, CMD_RAW_BUILD = Spring.Utilities.CMD.RAW_MOVE, Spring.Utilities.CMD.RAW_BUILD
+local CMD_JUMP = Spring.Utilities.CMD.JUMP
+local CMD_LEVEL = Spring.Utilities.CMD.LEVEL
+
 local TARGET_UNIT = 2
 local opts = CMD_OPT_ALT + CMD_OPT_INTERNAL
+
+
 
 local tsort = table.sort
 local osclock = os.clock
 
 
 local wh
-
+local CommandTweaks -- handle of the widget CommandTweaks
 
 local floor, round, huge, abs, max = math.floor, math.round, math.huge, math.abs, math.max
 local round = function(x)return tonumber(round(x)) end
 
 include('keysym.h.lua')
 local KEYSYMS = KEYSYMS
+widget.KEYSYMS = nil
 local UnitDefs = UnitDefs
 local maxUnits = Game.maxUnits
 local hasCandidate = false
-options_path = 'Hel-K/Split Attack'
-local f = VFS.Include('LuaUI\\Widgets\\UtilsFunc.lua')
+
+
+local f = f or VFS.Include('LuaUI\\Widgets\\UtilsFunc.lua') -- for compat with old Hel-K
+
+
+options_path = 'Hel-K/' .. widget:GetInfo().name
+options = {}
+options.active = {
+    name = 'Active',
+    type = 'bool',
+    value = activeByDefault,
+    OnChange = function(self)
+        if self.value then
+            if widgetHandler.Wake then
+                widgetHandler:Wake(widget)
+            else
+                for name in pairs(widget) do
+                    if type(name) == 'string' and widgetHandler[name .. 'List'] then
+                        widgetHandler:UpdateWidgetCallIn(name, widget)
+                    end
+                end
+            end
+            widget:CommandsChanged()
+        else
+            if widgetHandler.Sleep then
+                widgetHandler:Sleep(widget, {PlayerChanged = true})
+            else
+                for name in pairs(widget) do
+                    if type(name) == 'string' and widgetHandler[name .. 'List'] and name ~= 'PlayerChanged' then
+                        widgetHandler:RemoveWidgetCallIn(name, widget)
+                    end
+                end
+            end
+        end
+    end
+}
+
 
 ------------- DEBUG CONFIG
 local Debug = { -- default values
@@ -97,25 +128,25 @@ local Debug = { -- default values
     ,command = false
     ,CF2 = false
 }
-Debug.hotkeys = {
-    active =            {'ctrl','alt','COMMA'} -- this hotkey active the rest
-    ,global =           {'ctrl','alt','G'}
+-- Debug.hotkeys = {
+--     active =            {'ctrl','alt','COMMA'} -- this hotkey active the rest
+--     ,global =           {'ctrl','alt','G'}
 
-    ,ordering =            {'ctrl','alt','O'}
-    ,attackers =        {'ctrl','alt','A'}
-    ,ground_target =    {'ctrl','alt','R'}
-    ,draw =             {'ctrl','alt','W'}
-    ,draw_tag =         {'ctrl','alt','T'}
-    ,algo =             {'ctrl','alt','L'}
-    ,cancel =           {'ctrl','alt','C'}
-    ,UC =               {'ctrl','alt','U'}
+--     ,ordering =            {'ctrl','alt','O'}
+--     ,attackers =        {'ctrl','alt','A'}
+--     ,ground_target =    {'ctrl','alt','R'}
+--     ,draw =             {'ctrl','alt','W'}
+--     ,draw_tag =         {'ctrl','alt','T'}
+--     ,algo =             {'ctrl','alt','L'}
+--     ,cancel =           {'ctrl','alt','C'}
+--     ,UC =               {'ctrl','alt','U'}
 
-    ,CF2 =              {'ctrl','shift','F'}
-    ,nextTarget =       {'ctrl','shift','N'}
-    ,command =          {'ctrl','shift','C'}
-    ,dist =             {'ctrl','shift','I'}
+--     ,CF2 =              {'ctrl','shift','F'}
+--     ,nextTarget =       {'ctrl','shift','N'}
+--     ,command =          {'ctrl','shift','C'}
+--     ,dist =             {'ctrl','shift','I'}
 
-}
+-- }
 
 
 local bomberDefID = {}
@@ -133,14 +164,24 @@ local subjectDefID = {
 for k,v in pairs(bomberDefID) do
     subjectDefID[k] = v
 end
+local misc = {
+    cloaksnipe = true,
+    gunshipemp = true,
+    gunshipraid = true,
+    gunshipbomb = true,
+    spiderantiheavy = true,
+    spideremp = true,
+    spiderriot = true,
+    cloakheavyraid = true,
+    gunshipassault = true,
+
+
+}
 for id,def in pairs(UnitDefs) do
     local name = def.name
-    if name:match('arty')
-        or name=='cloaksnipe'
-        or name=='gunshipemp'
-        or name=='gunshipraid'
-        or name == 'spiderantiheavy'
-        or name == 'cloakheavyraid' then
+    if name:find('arty')
+    or misc[name]
+    then
         subjectDefID[id] = true
     end
 end
@@ -151,6 +192,7 @@ end
 -- CONFIG -- 
 local MAX_ELDER_TIME = 2 -- how long until we forget about old targets, if opt.removeOldest is, they can be cancelled first when split is maxed and shift is not held
 local REMOVE_TIMEOUT = 1.2 -- if opt.RemoveOnTimeOut on non shift order, we will not wait to have every units assigned a different target, we will just cancel all of them and start fresh
+local PING_LEEWAY = 0.02
 local opt = {
     -- which algrorythmn should we use to attach units to the differents targets
     -- (setting all to true would be useless)
@@ -177,14 +219,16 @@ local StartProcess, Register, DefineGroups, AttachTargets, DistributeOrders
 local SendOrders, CancelAttacks
 local FindHungarian, GetOrdersNoX
 local FilterSel, ReorderTable, ByClosest, identical
-local AddAttackerToGroup, MapTarget
+local AddAttackerToGroup, MapTarget, CheckTarget
 local AdjustTargets, GetFarthest, GetOldest, AddToElder, RemoveFromElder, RemoveTarget
 local GetPos, GetPosOrder, IDsOf, Disown
 local CodeOptions
 
 -- shared variables
 local attackers,targets,groups= {n=0}, {n=0,map={}, mapOthers={}}, {n=0}
+local recentMap = {}
 local sel,allsel,mods = {},{},{}
+local waitRemove = {}
 local elder = {time=osclock(),empty=true}
 local mempoints = {n=0}
 local active, nextTarget, nextTargetOnPressed, processed
@@ -193,7 +237,7 @@ local CF2, CF2_TakeOver,lastx,lasty, lastclock, memcom, acom, memcomname, blockC
 local cmd
 local acceptableCmd={--[[[CMD_RAW_MOVE]=true,--]][CMD_ATTACK]=true,[CMD_UNIT_SET_TARGET]=true}
 
-
+local clear = function(t) for k,v in pairs(t) do t[k] = nil end end
 local time = 0
 
 local INSERT_TABLE = {-1, CMD_ATTACK, 0}
@@ -211,12 +255,12 @@ end
 local got,rec,drawUnit = {},{},{}
 
 
-local myTeamID = Spring.GetMyTeamID()
-
+local myTeamID = spGetMyTeamID()
+local myPlayerID = Spring.GetMyPlayerID()
 -- local lastCmd
 
 ---- MAIN
--- main callins are ordered chronologically
+
 function widget:KeyPress(key,m, isRepeat) -- note: mods always appear in the order alt,ctrl,shift,meta when iterated  -- we can simulate the same by traversing the table {alt=true,ctrl=true,meta=true,shift=true}
     if isRepeat then
         return
@@ -229,10 +273,19 @@ function widget:KeyPress(key,m, isRepeat) -- note: mods always appear in the ord
     if memcomname and memcomname~='Attack' then
         memcomname=nil
     end
-
-
 end
-
+function widget:KeyRelease(key,m)
+    mods = m
+    if memcomname and not m.alt then
+        local old = memcomname
+        local acom, _
+        memcom, acom, _, memcomname = spGetActiveCommand()
+        if memcomname and memcomname ~= 'Terra Mex' and old == memcomname then
+            spSetActiveCommand(0)
+            memcomname = false
+        end
+    end
+end
 
 
 
@@ -246,11 +299,18 @@ function widget:CommandsChanged()
             elder = {time=time,empty=true}
         end
     end
+    clear(recentMap)
     allsel = spGetSelectedUnits()
     hasCandidate = false
-    for i,id in ipairs(allsel) do
-        local defID = spGetUnitDefID(id)
+    if not allsel[2] then
+        return
+    end
+    local count = 0
+    for defID, units in pairs(WG.selectionDefID or spGetSelectedUnitsSorted()) do
         if subjectDefID[defID] then
+            count = units[2] and 2 or count + 1
+        end
+        if count == 2 then
             hasCandidate = true
             break
         end
@@ -283,6 +343,9 @@ end
 
 function widget:CommandNotify(cmdID,params,opts)
 
+    if not hasCandidate then
+        return
+    end
     if (cmdID~=CMD_ATTACK and cmdID~=CMD_RAW_MOVE and cmdID~=CMD_UNIT_SET_TARGET) then
         return
     end
@@ -292,9 +355,6 @@ function widget:CommandNotify(cmdID,params,opts)
         -- time=os.clock()
         -- Echo("time is ", time)
 
-        return
-    end
-    if not hasCandidate then
         return
     end
     if memcomname then -- keep the active command after release of mouse and until the release of alt
@@ -315,24 +375,22 @@ function widget:CommandNotify(cmdID,params,opts)
         end
     end
     cmd = cmdID
+    -- check for ctrl tweak (shoot once mod)
+    INSERT_TABLE[3] = 0
+    if CommandTweaks then
+        CommandTweaks.Process(cmd, params, opts)
+        if opts.ctrl then
+            INSERT_TABLE[3] = CMD.OPT_CTRL
+        end
+    end
+    --
     local proc = StartProcess()
     -- lastCmd = cmd
     return proc
 
 end
 
-function widget:KeyRelease(key,m)
-    mods = m
-    if memcomname and not m.alt then
-        local old = memcomname
-        local acom, _
-        memcom, acom, _, memcomname = spGetActiveCommand()
-        if memcomname and memcomname ~= 'Terra Mex' and old == memcomname then
-            spSetActiveCommand(0)
-            memcomname = false
-        end
-    end
-end
+
 
 ------
 
@@ -399,9 +457,16 @@ StartProcess = function() -- First, verify and adjust our command, units, nextTa
     return Register()
 end
 
+local virtualQueue = {}
 
-
-
+local Getping
+do
+    local ping = 0.233
+    local spGetPlayerInfo = Spring.GetPlayerInfo
+    GetPing = function()
+        return select(6,spGetPlayerInfo(myPlayerID, true))
+    end
+end
 
 Register = function()
     local shift = mods.shift and cmd~=CMD_UNIT_SET_TARGET
@@ -409,24 +474,35 @@ Register = function()
     local attackers_n = 0
     local tid
     local tx,ty,tz = unpack(nextTarget)
-    local timed_out = osclock()-time>REMOVE_TIMEOUT
-    local getOthers = opt.removeOnTimeOut and timed_out
+    local now = osclock()
+    local timed_out = now-time>REMOVE_TIMEOUT
+    local lookForStart = opt.removeOnTimeOut and timed_out
     if timed_out then
         Debug.cancel('TIMED OUT')
+        clear(recentMap)
     end
-    time = osclock()
+    time = now
     -- Echo("time is ", time)
     if opt.removeOldest then
         AddToElder(nextTarget)
     end
 
     local mapDiffCmd={}
-                                                           -- , then will never decrease again if all other attackers got that same start pos (same last order when shift)
+     -- , then will never decrease again if all other attackers got that same start pos (same last order when shift)
 
     local map,mapOthers,startMap = {},{},{}
 
     targets = {n=0,map=map,mapOthers=mapOthers}
     groups = {n=0,startMap=startMap,sameStart=mods.shift and 2} -- sameStart will be decreased to 1 when the first start position is found
+
+    -- if next(recentMap) then
+    --     Echo('recentMap:')
+    --     for k,v in pairs(recentMap) do
+    --         Echo('=>',k,next(v))
+    --     end
+    -- else
+    --     Echo('recentMap: none')
+    -- end
 
 
     -- local map = targets.map
@@ -435,7 +511,6 @@ Register = function()
 
     map[round(tx)] = {[round(tz)]=nextTarget}
     mapOthers[round(tx)] = {[round(tz)]=nextTarget}
-
     targets_n = targets_n+1
     targets[targets_n]=nextTarget
     --
@@ -447,106 +522,130 @@ Register = function()
     local inc = shift and -1 or 1
     for i,attacker in ipairs(attackers) do
         local id = attacker.id
-        local queue = spGetCommandQueue(id,-1) -- NOTE: when cheating we cannot get queue from a controlled enemy unit (or there might be a way I didnt find yet)
-        if cmd==CMD_UNIT_SET_TARGET then
-            -- Echo("Spring.SetUnitTarget,Spring.GetUnitTarget is ", Spring.SetUnitTarget,Spring.GetUnitTarget)
-                -- Echo("1 is ", Spring.GetUnitRulesParam(id, "target_type"))
-            if timed_out then
-                queue = {}
-                -- Echo(id,os.clock(),'queue empty')
-            else
-                local target_type = spGetUnitRulesParam(id, "target_type")
-                if target_type==TARGET_UNIT then
-                    local tgtID = spGetUnitRulesParam(id, "target_id") -- NOTE: there is still the last target id even if the targetting has been cancelled ! (should fix)
-                    if tgtID and tgtID~=0 then
-                        if shift then
-                            table.insert(queue,{id=CMD_UNIT_SET_TARGET,params={tgtID}})
-                        else
-                            queue = {{id=CMD_UNIT_SET_TARGET,params={tgtID}}}
-                        end    
-                    end
-                end
-            end
+
+        local queue = virtualQueue[id]
+        local usingVirtualQueue = queue and queue.life and queue.life > now
+        if not queue or not (queue.life and queue.life > now) then
+            queue = spGetCommandQueue(id,-1) -- NOTE: when cheating we cannot get queue from a controlled enemy unit (or there might be a way I didnt find yet)
+            virtualQueue[id]  = queue
         end
-        local queue_i = inc<0 and #queue or 1
-
-        local order = queue[queue_i]
-        -- 'Others' will not count as cancellable
-        local getOthers = getOthers or shift and not queue[2]
-        if order and order.id==0 then 
-            -- in case the game is paused and a stop order has been issued while paused
-            queue_i=2
-            order = queue[queue_i]
-            getOthers = getOthers or shift and not queue[3]
-        end
-        local map = getOthers and mapOthers or targets.map
-        -- local order = queue[queue_i]
-
-        --
-        -- in case of shift, the starting position (aka attacker[1]...attacker[3]) is the last order that got position
-        -- , if no shift, this is the unit itself
-
-
-        while order do
-            tid,tx,ty,tz = GetPosOrder(order)
-            -- Echo('attacker '..attacker.id,'order #'..queue_i..', cmd '..order.id,(tid and 'id: '..tid or 'no id'),'pos: '..'x'..round(tx or -1)..', '..'z'..round(tz or -1))
-            -- found a position order
-            if tz then
-                -- if not set yet, set the starting position for this attacker
-                tx,tz = round(tx/16)*16, round(tz/16)*16
-                ty=spGetGroundHeight(tx,tz)
-                if shift and getOthers and not attacker[3] then
-                    Debug.attackers('attacker '..attacker.id..' found a last pos at order #'..queue_i)
-                    attacker[1],attacker[2],attacker[3]= tx,ty,tz
-                    if groups.sameStart then
-                        local _, new = MapTarget(tx,ty,tz,nil,startMap,order.id)
-                        if new then
-                            groups.sameStart = groups.sameStart-1
-                            if groups.sameStart==0 then groups.sameStart=false end
+        if not queue then
+            attackers_n = attackers_n - 1
+        else
+            if cmd==CMD_UNIT_SET_TARGET then
+                -- Echo("Spring.SetUnitTarget,Spring.GetUnitTarget is ", Spring.SetUnitTarget,Spring.GetUnitTarget)
+                    -- Echo("1 is ", Spring.GetUnitRulesParam(id, "target_type"))
+                if timed_out then
+                    queue = {}
+                    -- Echo(id,os.clock(),'queue empty')
+                else
+                    local target_type = spGetUnitRulesParam(id, "target_type")
+                    if target_type==TARGET_UNIT then
+                        local tgtID = spGetUnitRulesParam(id, "target_id") -- NOTE: there is still the last target id even if the targetting has been cancelled ! (should fix)
+                        if tgtID and tgtID~=0 then
+                            if shift then
+                                table.insert(queue,{id=CMD_UNIT_SET_TARGET,params={tgtID}})
+                            else
+                                queue = {{id=CMD_UNIT_SET_TARGET,params={tgtID}}}
+                            end    
                         end
                     end
                 end
-                -- if cmd == order.id then
-                if acceptableCmd[order.id] then
-                   
-                    local target, new, existing = MapTarget(tx,ty,tz,tid,map,order.id)
-                    if existing and not timed_out and cmd~=CMD_UNIT_SET_TARGET then
-                        Debug.cancel('clicked an already existing target on '..(getOthers and 'another' or shift and 'last' or 'first')..' order.')
-                        return true
+            end
+            local queue_i = inc<0 and #queue or 1
+
+            local order = queue[queue_i]
+            -- Echo("#queue is ", #queue,'virtual',usingVirtualQueue,'queue_i',queue_i,'order',order,'first', queue and queue[1], 'cmd', queue and queue[1] and queue[1].id)
+            -- 'Others' will not count as cancellable
+            local lookForStart = lookForStart or shift and not queue[2]
+            if order and order.id==0 then 
+                -- in case the game is paused and a stop order has been issued while paused
+                queue_i=2
+                order = queue[queue_i]
+                lookForStart = lookForStart or shift and not queue[3]
+            end
+            local map = lookForStart and mapOthers or targets.map
+            -- local order = queue[queue_i]
+
+            --
+            -- in case of shift, the starting position (aka attacker[1]...attacker[3]) is the last order that got position
+            -- , if no shift, this is the unit itself
+
+
+            while order do
+                tid,tx,ty,tz = GetPosOrder(order)
+                -- Echo('attacker '..attacker.id,'order #'..queue_i..', cmd '..order.id,(tid and 'id: '..tid or 'no id'),'pos: '..'x'..round(tx or -1)..', '..'z'..round(tz or -1))
+                -- found a position order
+                if tz then
+                    -- if not set yet, set the starting position for this attacker
+                    -- tx,tz = round(tx/16)*16, round(tz/16)*16
+                    tx,tz = round(tx), round(tz)
+                    ty=spGetGroundHeight(tx,tz)
+                    -- Echo("order #",queue_i ..'/'..(#queue),'cmd',order.id,'pos',tx,tz,'check', CheckTarget(tx,ty,tz,recentMap))
+                    if CheckTarget(tx,ty,tz,recentMap) then
+                        lookForStart, map = false, targets.map
+                        Debug.attackers('attacker '..attacker.id..' order '..queue_i.." is part of the lastly processed targets, don't use it at start pos")
                     end
-                    if not getOthers then
-                        if new then
-                            targets_n = targets_n+1
-                            targets[targets_n] = target
+                    if shift and lookForStart and not attacker[3] then
+                    -- Echo("next(targets.map) for ",tx,tz,'is', next(targets.map), next(targets.map) and next(select(2,next(targets.map)))  )
+                        Debug.attackers('attacker '..attacker.id..' found a last pos at order #'..queue_i..', cmd '..order.id..' at x'..tx..' z'..tz)
+                        attacker[1],attacker[2],attacker[3]= tx,ty,tz
+                        if groups.sameStart then
+                            local _, new = MapTarget(tx,ty,tz,nil,startMap,order.id)
+                            if new then
+                                groups.sameStart = groups.sameStart-1
+                                if groups.sameStart==0 then
+                                    groups.sameStart=false
+                                end
+                            end
                         end
-                        attacker.current=target
-                        attacker.tag = order.tag
                     end
-                elseif not getOthers and not shift and cmd~=CMD_UNIT_SET_TARGET then -- in case the unit got another order, it has to be removed if no shift
-                    Debug.ordering('attacker '..id..' got a non-attack order, cmd:'..order.id, tid and 'id: '..tid or 'ground: x'..tx..', z'..tz )
-                    attacker.current = MapTarget(tx,ty,tz,tid,mapDiffCmd,order.id) -- the details doesn't matter in this case, we just want DistributeOrder to cancel this
-                    attacker.tag = order.tag
+                    -- if cmd == order.id then
+                    if acceptableCmd[order.id] then
+                       
+                        local target, new, existing = MapTarget(tx,ty,tz,tid,map,order.id)
+                        -- if new then
+                        --     Echo('NEW target',tx,tz)
+                        -- end
+                        if existing and not timed_out and cmd~=CMD_UNIT_SET_TARGET then
+                            Debug.cancel('clicked an already existing target on '..(lookForStart and 'another' or shift and 'last' or 'first')..' order.')
+                            return true
+                        end
+                        if not lookForStart then
+                            
+                            if new then
+                                targets_n = targets_n+1
+                                targets[targets_n] = target
+                            end
+                            attacker.current=target
+                            attacker.tag = order.tag or -1
+                        end
+                    elseif not lookForStart and not shift and cmd~=CMD_UNIT_SET_TARGET then -- in case the unit got another order, it has to be removed if no shift
+                        Debug.ordering('attacker '..id..' got a non-attack order, cmd:'..order.id, tid and 'id: '..tid or 'ground: x'..tx..', z'..tz )
+                        attacker.current = MapTarget(tx,ty,tz,tid,mapDiffCmd,order.id) -- the details doesn't matter in this case, we just want DistributeOrder to cancel this
+                        attacker.tag = order.tag or -1
+                    end
+                end
+                -- now we look for other order in the queue that got position, either to know them for not reordering it
+                -- , or also to look for a starting position when shift is held
+                queue_i = queue_i+inc
+                order=queue[queue_i]
+                if not lookForStart then
+                    lookForStart=true
+                    map=mapOthers
                 end
             end
-            -- now we look for other order in the queue that got position, either to know them for not reordering it
-            -- , or also to look for a starting position when shift is held
-            queue_i = queue_i+inc
-            order=queue[queue_i]
-            if not getOthers then
-                getOthers=true
-                map=mapOthers
+            -- in case of shift, and no other positionned order found, the attacker starting point is itself
+            if not attacker[3] then 
+                Debug.attackers('attacker '..id.." didn't find any order to start from, it will start from itself")
+                groups.sameStart=false
+                local x,y,z = spGetUnitPosition(id)
+                attacker[1],attacker[2],attacker[3] = round(x),round(y),round(z)
+
             end
-        end
-        -- in case of shift, and no other positionned order found, the attacker starting point is itself
-        if not attacker[3] then 
-            Debug.attackers('attacker '..id.." didn't find any order to start from, it will start from itself")
-            groups.sameStart=false
-            local x,y,z = spGetUnitPosition(id)
-            attacker[1],attacker[2],attacker[3] = round(x),round(y),round(z)
 
+            attackers_n = attackers_n + 1
         end
-
-        attackers_n=i
     end
     targets.n=targets_n
     -- Echo('targets =>',targets.n)
@@ -558,6 +657,8 @@ Register = function()
             attackers.target = nextTarget
             groups[1] = attackers
             groups.n=1
+            local tx,tz = round(nextTarget[1]), round(nextTarget[3])
+            recentMap[tx] = {[tz]=nextTarget}
             DistributeOrders()
         else
             Debug.cancel('no target or no attacker, '..targets.n..' vs '..attackers.n)
@@ -657,6 +758,7 @@ AttachTargets = function()
 
 
     -- if true then return end
+    local groups_n = groups.n
     if Debug.dist() then
         for i=1,groups_n do
             local group = groups[i]
@@ -671,8 +773,8 @@ AttachTargets = function()
     end
 
 
-    local groups_n = groups.n
     if groups.sameStart then -- keeping the way targets got inserted, it doesn't matter, since all groups start from same position
+        Debug.algo('not using any algo, everyone start from the same location')
         for i=1,groups_n do
             groups[i].target = targets[i]
         end
@@ -756,10 +858,12 @@ DistributeOrders = function()
                 --     Echo('the bomber '..id..' cannot afford to switch to attack as it is unloaded')
                 --     --skip, the bomber cannot afford to switch to attack as it is unloaded
                 -- else
-                    local possible = target.id and attacker.canAttack or attacker.canMove -- not ideal, the ideal would be to know in advance which unit will have to switch to something impossible and filter them out but this is decided by algo
+                    local possible = target.cmd == CMD_ATTACK and attacker.canAttack or attacker.canMove -- not ideal, the ideal would be to know in advance which unit will have to switch to something impossible and filter them out but this is decided by algo
+
                     if possible then
                         attacker.attack = target
-                        attacker.cancel = attacker.tag -- attacker have another target to cancel
+                        attacker.cancel = attacker.tag -- if the order is virtual we cannot have the tag, instead we order to remove the last order
+                        -- Debug.attackers('setting')
                     end
                     -- Echo('attacker '..attacker.id.." have current target: "..(cur_target and (cur_target.id or 'ground: '..'x'..cur_target[1]..', z'..cur_target[3]) or 'none'))
                     -- Echo('attacker '..attacker.id.." don't have"..(attacker.cancel and ' the good'or '')..' target '..(attacker.cancel and ', need to cancel order '..attacker.cancel or '.'))
@@ -775,9 +879,12 @@ DistributeOrders = function()
                          ..' to '..(newGroundTarget and 'ground: '..'x'..round(target[1])..', '..'z'..round(target[3]) or 'id: '..target.id))
                 end
                 --
-
                 want_c=want_c+1
                 want_cancel.ids[want_c]=id
+                if attacker.cancel == -1 then
+                    -- this is no tag, because we get the order from virtual queue, we will wait for the order to appear so we can remove it
+                    waitRemove[id] = (waitRemove[id] or 0) + 1
+                end
                 want_cancel.orders[want_c]={CMD_REMOVE,attacker.cancel,0}
 
                 -- spGiveOrderToUnit(id,CMD_REMOVE,attacker.cancel,0)
@@ -811,6 +918,21 @@ end
 
 
 function widget:UnitCommand(id,defID,teamID,cmd,params)
+    if cmd == CMD_REMOVE and params[1] == -1 then -- hacky way to remove the last order
+        local rem = waitRemove[id]
+        if rem then
+            local q = spGetCommandQueue(id,-1)
+            local last = q[#q]
+            if last and (last.id == CMD_ATTACK or last.id == CMD_RAW_MOVE) then
+                spGiveOrderToUnit(id, CMD_REMOVE, q[#q].tag, 0)
+            end
+            rem = rem - 1
+            if rem == 0 then
+                rem = nil
+            end
+            waitRemove[id] = rem
+        end
+    end
     if Debug.UC() then
         for i,p in pairs(params) do
             params[i]=round(p)
@@ -819,7 +941,17 @@ function widget:UnitCommand(id,defID,teamID,cmd,params)
     end
 end
 
+function WidgetInitNotify(w, name, preloading)
+    if name == 'Command Tweaks' then
+        w = CommandTweaks
+    end
+end
 
+function WidgetRemoveNotify(w, name, preloading)
+    if name == 'Command Tweaks' then
+        w = nil
+    end
+end
 
 function widget:Initialize()
     if Spring.GetSpectatingState() then
@@ -828,6 +960,7 @@ function widget:Initialize()
     end
     Debug = f.CreateDebug(Debug,widget,options_path)
     wh = widgetHandler
+    CommandTweaks = wh:FindWidget('Command Tweaks')
     widget:CommandsChanged()
 end
 
@@ -882,8 +1015,8 @@ SendOrders = function(t)
     -- INSERT_TABLE[1] = mods.shift and -1 or 0
     -- local cmd = cmd
     local shift = mods.shift and cmd~=CMD_UNIT_SET_TARGET
+    local life = os.clock() + GetPing() + PING_LEEWAY
     for target, ids in pairs(t) do
-
         local cmd = target.cmd
         INSERT_TABLE[2] = cmd
         if shift then
@@ -892,10 +1025,24 @@ SendOrders = function(t)
             else
                 INSERT_TABLE[4],INSERT_TABLE[5],INSERT_TABLE[6] = unpack(target)
             end
+            if cmd == CMD_ATTACK then
+                local vOrder = {id = cmd, params = {INSERT_TABLE[4],INSERT_TABLE[5],INSERT_TABLE[6]}}
+                for _,id in ipairs(ids) do
+                    local vQueue
+                    if not shift then
+                        vQueue = {}
+                        virtualQueue[id] = vQueue
+                    else
+                        vQueue = virtualQueue[id]
+                    end
+                    vQueue.life = life
+                    table.insert(vQueue,vOrder)
+                end
+            end
             spGiveOrderToUnitArray(ids, CMD_INSERT, INSERT_TABLE, opts)
         else
             if target.id and (cmd==CMD_ATTACK or cmd==CMD_UNIT_SET_TARGET) then
-                target = target.id
+                target = {target.id}
             else
 
                 -- table.insert(target,1,0)
@@ -904,7 +1051,21 @@ SendOrders = function(t)
             -- for i,id in ipairs(ids) do
             --     Echo('send order '..cmd..' to '..ids[i]..' at '..(type(target)=='number' and 'id: '..target or 'ground: x'..target[1]..', z'..target[3]) )
             -- end
-            spGiveOrderToUnitArray(ids, cmd, target, 0)
+            if cmd == CMD_ATTACK then
+                local vOrder = {id = cmd, params = target}
+                for _,id in ipairs(ids) do
+                    local vQueue
+                    if not shift then
+                        vQueue = {}
+                        virtualQueue[id] = vQueue
+                    else
+                        vQueue = virtualQueue[id]
+                    end
+                    vQueue.life = life
+                    table.insert(vQueue,vOrder)
+                end
+            end
+            spGiveOrderToUnitArray(ids, cmd, target, target[3] and CMD.OPT_CTRL or 0)
         end
     end
     if (cmd==CMD_ATTACK) then
@@ -1090,7 +1251,10 @@ do
         [CMD_UNIT_SET_TARGET] = true,
     }
 end
-
+CheckTarget = function(tx,ty,tz, map)
+    tx = round(tx)
+    return map[tx] and map[tx][round(tz)]
+end
 MapTarget = function(tx,ty,tz,tid,map,cmd) -- make unique points
     local new,existing
     tx,tz = round(tx),round(tz)
