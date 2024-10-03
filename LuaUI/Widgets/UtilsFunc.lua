@@ -2,8 +2,11 @@
 
 -- Author Helwor
 -- License GPL v2 or v3
--- now registering only what we need from global before we change environment, aswell will quicken access
+if WG.utilFuncs then
+    return WG.utilFuncs
+end
 
+-- now registering only what we need from global before we change environment, aswell will quicken access
 local Echo      		= Spring.Echo
 local round 			= math.round
 local abs 				= math.abs
@@ -140,6 +143,7 @@ local _, ToKeysyms = include("Configs/integral_menu_special_keys.lua")
 
 local widgetHandler = widgetHandler
 local widget = widget 
+local wenv = getfenv()
 
 local mapSizeX, mapSizeZ = Game.mapSizeX, Game.mapSizeZ
 
@@ -3666,14 +3670,6 @@ end
 
 
 
-GetMouseOwner = function()
-	local owner = wid.handler.mouseOwner and wid.handler.mouseOwner
-	local ownerName = owner and owner.GetInfo and owner:GetInfo().name
-	return owner,ownerName
-end
-
-
-
 
 Range = function(range) -- wrapper create and update table with fixed range size, giving also average and length
 	range=not range and inf or range
@@ -3745,53 +3741,57 @@ end)
 
 ---
 function CheckTime(origOrder,...) -- can execute function and check its time of execution
-	--if function is the order then it will check time of execution
-	--if function and argument are in '...' then it will wrap a function that execute the argfunc with its arguments when called with 'run'
-	local time
+    --if function is the order then it will check time of execution
+    --if function and argument are in '...' then it will wrap a function that execute the argfunc with its arguments when called with 'run'
+    local time
 
-	local renew
-	local func, funcArgs
-	local GetTimer=sp.GetTimer
-	local DiffTimers=sp.DiffTimers
-	local elapsed, average, count = 0,0,0
-	local origArgs = {...}
-	local renewfunc=function(pause)
+    local renew
+    local func, funcArgs
+    local GetTimer=sp.GetTimer
+    local DiffTimers=sp.DiffTimers
+    local elapsed, average, count = 0,0,0
+    local origArgs = {...}
+    local renewfunc=function(pause)
         time, renew, elapsed,  count = not pause and GetTimer(), false,0,0
     end
-	if origOrder=="start" then
-		time=GetTimer()
-	elseif origOrder =='set' then
-		-- nothing
-	end
+    if origOrder=="start" then
+        time=GetTimer()
+    elseif origOrder =='set' then
+        -- nothing
+    end
 
-	if t(origOrder)=='function' then
-		time=GetTimer()
-		local code = wid.code
-		local linecount=0
-		local name
-		local currentline = debug.getinfo(2).currentline
-		for word in wid.codelines[currentline]:gmatch('[%a]+') do
-			if (wid.mainfuncs[word] or wid.utilfuncs[word]) and not word=='CheckTime' then
-				name=word
-				break	
-			end
-		end
-		if not name then name = wid.codelines[currentline]:match('CheckTime%((%s-.*%))') end
-		local ret = {origOrder(...)}		
-		elapsed=DiffTimers(GetTimer(),time)
-		Echo(--[["function "..--]]name.."\n"..GreyStr.." finished in:"..elapsed )
-		return unpack(ret)
-	else
-		if t(origArgs[1])=='function' then
-			func=table.remove(origArgs,1)
-		end
-		return function(order,comment,...)
-			--Echo("self.verify is ", self.verify)
-			local norestart
-			if time then 
-				elapsed=elapsed+(DiffTimers(GetTimer(),time))
-				time= (order~='pause' and order~='stop') and GetTimer()
-			end
+    if t(origOrder)=='function' then
+        local code = wid and wid.code
+        local linecount=0
+        local name
+        if wid then -- FIX ME wid doesnt exist anymore in the new utilFuncs
+            local currentline = debug.getinfo(2).currentline
+            for word in wid.codelines[currentline]:gmatch('[%a]+') do
+                if (wid.mainfuncs[word] or wid.utilfuncs[word]) and word~='CheckTime' then
+                    name=word
+                    break   
+                end
+            end
+            if not name then name = wid.codelines[currentline]:match('CheckTime%((%s-.*%))') end
+        else
+            name = 'function'
+        end
+        time=GetTimer()
+        local ret = {origOrder(...)}        
+        elapsed=DiffTimers(GetTimer(),time)
+        Echo(--[["function "..--]]name.."\n"..GreyStr.." finished in:"..elapsed )
+        return unpack(ret)
+    else
+        if t(origArgs[1])=='function' then
+            func=table.remove(origArgs,1)
+        end
+        return function(order,comment,...)
+            --Echo("self.verify is ", self.verify)
+            local norestart
+            if time then 
+                elapsed=elapsed+(DiffTimers(GetTimer(),time))
+                time= (order~='pause' and order~='stop') and GetTimer()
+            end
             if order == 'count' then
                 if count == comment then
                     comment = (...)
@@ -3805,44 +3805,45 @@ function CheckTime(origOrder,...) -- can execute function and check its time of 
                     time = GetTimer()
                 end
 
-			elseif order=='average' then
-				if not time then
-					time = GetTimer()
-					return
-				else
-					count=count+1
-				end
-				if count==comment then
-					comment = (...) or 'say'
-					elapsed = elapsed/count
-					renew = true
-					norestart = true
-				else
-					time=nil
-				end
-			elseif order=='run' then
-				func(unpack(origArgs))
-			elseif tonumber(order) then
-				return tonumber(order)<=elapsed
-			elseif order=="reset" then
-				renew=true
-			elseif order=='restart' then
-				return CheckTime(origOrder,unpack(origArgs))
-			elseif order=="say" and not comment then
-				comment='say'
-			elseif order=="resume" and not time then -- can be used as a  start too
-				time=GetTimer()
-			end
-			if comment then
+            elseif order=='average' then
+                if not time then
+                    time = GetTimer()
+                    return
+                else
+                    count=count+1
+                end
+                if count==comment then
+                    comment = (...) or 'say'
+                    elapsed = elapsed/count
+                    renew = true
+                    norestart = true
+                else
+                    time=nil
+                end
+            elseif order=='run' then
+                func(unpack(origArgs))
+            elseif tonumber(order) then
+                return tonumber(order)<=elapsed
+            elseif order=="reset" then
+                renew=true
+            elseif order=='restart' then
+                return CheckTime(origOrder,unpack(origArgs))
+            elseif order=="say" and not comment then
+                comment='say'
+            elseif order=="resume" and not time then -- can be used as a  start too
+                time=GetTimer()
+            end
+            if comment then
 
-				Echo((comment=="say" and "elapsed:"..elapsed or comment))
-			end
+                Echo((comment=="say" and "elapsed:"..elapsed or comment))
+            end
 
-			return elapsed, renew and renewfunc(norestart)
-		end
+            return elapsed, renew and renewfunc(norestart)
+        end
 
-	end
+    end
 end
+
 
 --local res={allow(tick[1],1,Continue, A, "A")}
 --local res = {allow(tick[1],1,Continue, A, "A")}
@@ -4075,7 +4076,7 @@ function GetRealWidgetHandler(w)
 	local i,n,v = 0, true
 	while n do
 		i=i+1 
-		n,v=getupvalue(widgetHandler.RemoveCallIn, i)
+		n,v=debug.getupvalue(widgetHandler.RemoveCallIn, i)
 		if n=='self' then
 			return v
 		end
@@ -5751,23 +5752,20 @@ function GetTableOrderFromCode(code,nameVar,occurrence,uncommented,thetable,noMi
 	return t
 end
 
-activateDW = function(toggle) return wid.handler:UpdateWidgetCallIn("DrawWorld", wid.widget) end
-removeDW = function() return wid.handler:RemoveWidgetCallIn("DrawWorld", wid.widget) end
-
 
 local spGetTimer, spDiffTimers = Spring.GetTimer, Spring.DiffTimers
 local done = false
-function tracefunc(oriFunc,Log,warn) -- wrap function to add properly traced back error message
-	------ function info
-	local info = debug.getinfo(oriFunc)
-	local definedline = info.linedefined
-	local funcsource = info.source	
-	local name = wid.utilfuncs[funcsource] and wid.utilfuncs[definedline] or
-				 wid.mainfuncs[funcsource] and ( wid.mainfuncs[definedline] or wid.callins[definedline] )
+function tracefunc(oriFunc, wid, Log,warn) -- wrap function to add properly traced back error message
+    ------ function info
+    local info = debug.getinfo(oriFunc)
+    local definedline = info.linedefined
+    local funcsource = info.source  
+    local name = wid.utilfuncs[funcsource] and wid.utilfuncs[definedline] or
+                 wid.mainfuncs[funcsource] and ( wid.mainfuncs[definedline] or wid.callins[definedline] )
 
-	local funcfilename=funcsource:gsub('LuaUI[\\/]Widgets[\\/](.-)%.lua','%1')
-	--Echo('tracing func',name,funcfilename)
-	--
+    local funcfilename=funcsource:gsub('LuaUI[\\/]Widgets[\\/](.-)%.lua','%1')
+
+    --
     local makeReportfunc_line = false
 
     local debugfunc_line = false
@@ -5836,35 +5834,35 @@ function tracefunc(oriFunc,Log,warn) -- wrap function to add properly traced bac
         return report 
     end
 
-	local debugging=function(res)
+    local debugging=function(res)
         if not res[2] then 
             Echo('ERROR',funcsource,name,definedline)
             local report = debug.traceback()
             return error(report), Log and Log(report)
         end
-		local report=makeReport(res[2], true)
-		return error(Echo('\nError in ' .. report)) 
-	end
-	local runFunc=function(thisfunc,...)
-		local args={...}
+        local report=makeReport(res[2], true)
+        return error(Echo('\nError in ' .. report)) 
+    end
+    local runFunc=function(thisfunc,...)
+        local args={...}
         local function anonfunc()
             return thisfunc(unpack(args))
         end
         local time = warn and spGetTimer()
-		local res = {
+        local res = {
                 xpcall(
                     anonfunc            
                     , debug.traceback
             )
         }
 
-		local succeed = res[1]
-		if not wid then Echo("Widget stopped") return end
-		if succeed then
+        local succeed = res[1]
+        -- if not wid then Echo("Widget stopped") return end
+        if succeed then
             
             if time then
                 time = spDiffTimers(spGetTimer(), time)
-                if time>0.002 then
+                if time>0.2 then
                     local report = makeReport(debug.traceback())
                     Echo('\nFunction took longer than 0.2 sec: \n' .. report)
                     if Log then
@@ -5876,22 +5874,23 @@ function tracefunc(oriFunc,Log,warn) -- wrap function to add properly traced bac
         else
             debugging(res)
         end
-		--
-	end
+        --
+    end
     local function anonfunc2(...) -- 
         return runFunc(oriFunc,...)
     end
 
-	return anonfunc2
+    return anonfunc2
 end
 
 
 
 
 function DebugWidget(widget,Log,warn)
-	for k,v in pairs(widget) do 
-		if t(v)=='function' and wid.callins[k] then widget[k] = tracefunc(v,Log, warn) end
-	end
+    local wid = GetWidgetInfos()
+    for k,v in pairs(widget) do 
+        if t(v)=='function' and wid.callins[k] then widget[k] = tracefunc(v, wid, Log, warn) end
+    end
 end
 
 
@@ -7182,8 +7181,30 @@ WG.GetIconMidY      = GetIconMidY
 WG.iconSizeByDefID  = iconSizeByDefID
 WG.floatPlacingInfo = floatPlacingInfo
 
-wid = GetWidgetInfos()
 
+
+function renewfuncs() -- reload from source and update
+    Echo('renewing utilFuncs...')
+    local copy = function(t) local t2 = {} for k,v in pairs(t) do
+        t2[k] = v end return t2
+    end
+    WG.utilFuncs = nil
+    WG.utilFuncs = VFS.Include("LuaUI\\Widgets\\UtilsFunc.lua", copy(wenv) )
+end
+
+widgetHandler = GetRealWidgetHandler()
+
+widgetHandler.actionHandler:RemoveAction(widget, 'renewfuncs')
+widgetHandler.actionHandler:AddAction(widget, 'renewfuncs', renewfuncs, nil, 't')
+local oriShutdown = widget.Shutdown
+widget.Shutdown = function()
+    widgetHandler.actionHandler:RemoveAction(widget, 'renewfuncs')
+    if oriShutdown then
+        return oriShutdown()
+    end
+end
+
+WG.utilFuncs = localEnv
 
 
 
@@ -7256,7 +7277,6 @@ if false then
 		end
 	end
 end
-
 
 return localEnv
  -- make the env available as table, can be called in widget like 
