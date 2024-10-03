@@ -118,21 +118,39 @@ local function SafeTraceScreenRay(x, y, onlyCoords, useMinimap, includeSky, igno
 end
 local PreSelection_GetUnitUnderCursor = function (onlySelectable, ignoreSelectionBox)
 	local x, y, lmb, mmb, rmb, outsideSpring = spGetMouseState()
-
 	if mmb or rmb or outsideSpring then
 		cannotSelect = true
 	elseif cannotSelect and not lmb then
 		cannotSelect = false
 	end
+	local aboveMinimap = spIsAboveMiniMap(x, y)
+
 	if outsideSpring or
 		onlySelectable and cannotSelect or
 		WG.drawtoolKeyPressed or
-		WG.MinimapDraggingCamera and spIsAboveMiniMap(x, y) or
+		WG.MinimapDraggingCamera and aboveMinimap or
 		WG.Chili and WG.Chili.Screen0.hoveredControl or
-		not ignoreSelectionBox and WG.PreSelection_IsSelectionBoxActive() then
+		not ignoreSelectionBox and WG.PreSelection_IsSelectionBoxActive() or
+		(WG.Chili and WG.Chili.Screen0:IsAbove(x,y)) then
 		return
 	end
-	local  type, id = SafeTraceScreenRay(x, y, false, true)
+	local type, id
+	local EzTarget = WG.EzTarget
+	if EzTarget  and not aboveMinimap then
+		local modTarget = EzTarget.v.moddedTarget
+		local modSel = EzTarget.s.moddedSelect
+		local poses = EzTarget.poses
+		-- Echo("modSel or modTarget is ", modSel,modSel and poses[modSel], modTarget, modTarget and poses[modTarget])
+		if modSel or modTarget then
+			type = 'unit'
+			id = ((modSel and poses[modSel][3] or 1000)) < ((modTarget and poses[modTarget][3]) or 1000) and modSel or modTarget
+			-- Echo(modSel, modTarget,"pick => ", id)
+		end
+	end
+	if not id then
+	 	type, id = SafeTraceScreenRay(x, y, false, aboveMnimap,false,true)
+	end
+
 	if type ~= 'unit' or not spValidUnitID(id) then
 		return
 	end
@@ -153,14 +171,14 @@ local PreSelection_GetUnitUnderCursor = function (onlySelectable, ignoreSelectio
 	-- end
 end
 
-local PreSelection_IsSelectionBoxActive = function ()
+local PreSelection_IsSelectionBoxActive = function (thresholdMatters)
 	local x, y, lmb = spGetMouseState()
 	if not lmb then
 		return false
 	end
 	local _, here = SafeTraceScreenRay(x, y, true, thruMinimap)
 	if lmb and not cannotSelect and holdingForSelection and
-		not (here[1] == start[1] and here[2] == start[2] and here[3] == start[3]) then
+		not (thresholdMatters or here[1] == start[1] and here[2] == start[2] and here[3] == start[3]) then
 
 		return true
 	end
@@ -297,7 +315,7 @@ function widget:MousePress(x, y, button)
 	if (button == 1) then
 		if spGetActiveCommand() == 0 then
 			thruMinimap = not WG.MinimapDraggingCamera and spIsAboveMiniMap(x, y)
-			if thruMinimap or not (WG.Chili and WG.Chili.Screen0:IsAbove(x,y)) then
+			if not (WG.Chili and WG.Chili.Screen0:IsAbove(x,y)) then
 				local _
 				_, start = SafeTraceScreenRay(x, y, true, thruMinimap)
 				holdingForSelection = true
