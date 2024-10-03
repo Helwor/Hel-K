@@ -256,7 +256,9 @@ function ProcessUnit(id, cmd, params, opts, defID)
 		-- TODO IMPLEMENT UNIT_AI, HOW TO CHECK FOR UNIT AI STATE??? spGetUnitStates doesnt have it, nor do spGetUnitRulesParam
 	end
 end
-widget.UnitCommandNotify = ProcessUnit
+function widget:UnitCommandNotify(id, cmd, params, opts)
+	return ProcessUnit(id, cmd, params, opts)
+end
 
 function widget:CommandNotify(cmd, params)
 	if cmd == CMD_MOVE_STATE then -- user is manually setting move state, we forget about those units
@@ -348,22 +350,25 @@ function widget:Initialize()
 end
 
 local debugMe = false
+
 local spGetUnitPosition = Spring.GetUnitPosition
 local spIsUnitInView = Spring.IsUnitInView
 local spWorldToScreenCoords = Spring.WorldToScreenCoords
-local red, white = {unpack(Colors.red)}, Colors.white
-red[4] = 0.3
+local red, white = {1,0,0,0.3}, {1,1,1,1}
+
 local ScreenDisc = gl.Utilities.DrawScreenDisc
-function widget:DrawScreen()
-	if debugMe then
-		gl.Color(red)
-		for id in pairs(oriMoveState) do
-			if spIsUnitInView(id) then
-				local _,_,_,x, y, z = spGetUnitPosition(id, true)
-				x, y = spWorldToScreenCoords(x, y, z)
-				ScreenDisc(x,y, 5)
+if ScreenDisc then
+	function widget:DrawScreen()
+		if debugMe then
+			gl.Color(red)
+			for id in pairs(oriMoveState) do
+				if spIsUnitInView(id) then
+					local _,_,_,x, y, z = spGetUnitPosition(id, true)
+					x, y = spWorldToScreenCoords(x, y, z)
+					ScreenDisc(x,y, 5)
+				end
 			end
+			gl.Color(white)
 		end
-		gl.Color(white)
 	end
 end
