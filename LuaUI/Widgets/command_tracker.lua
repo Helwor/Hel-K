@@ -14,7 +14,10 @@ function widget:GetInfo()
     }
 end
 local Echo                          = Spring.Echo
-local f = VFS.Include("LuaUI\\Widgets\\UtilsFunc.lua")
+if not f then -- compat with the old Hel-K
+    f = VFS.Include('LuaUI\\Widgets\\UtilsFunc.lua')
+    COLORS = f.COLORS
+end
 local ploppableDefs = {}
 for unitDefID, unitDef in pairs(UnitDefs) do
     local cp = unitDef.customParams
@@ -57,7 +60,7 @@ local selByID = {}
 local page = 0
 
 local CMD = CMD
-local cmdNames = setmetatable(f.CMD_NAMES, {__index=function(t,k) return 'UNKNOWN' .. (k<0 and 'BUILD' or '')  end })
+local cmdNames = f.cmdNames or setmetatable(f.CMD_NAMES, {__index=function(t,k) return 'UNKNOWN' .. (k<0 and 'BUILD' or '')  end }) -- compat with the old hel-K
 local DebugUnitCommand = f.DebugUnitCommand
 
 local spGetUnitDefID                = Spring.GetUnitDefID
@@ -122,8 +125,15 @@ local CMD_REPAIR = CMD.REPAIR
 local CMD_REMOVE = CMD.REMOVE
 local CMD_STOP = CMD.STOP
 local CMD_OPT_SHIFT, CMD_OPT_INTERNAL = CMD.OPT_SHIFT, CMD.OPT_INTERNAL
+local CMD_PRIORITY = customCmds.PRIORITY
+local CMD_WANT_CLOAK = customCmds.WANT_CLOAK
+local CMD_WANT_ONOFF = customCmds.WANT_ONOFF
+local CMD_RAISE = customCmds.RAISE
+local CMD_RAMP = customCmds.RAMP
+local CMD_LEVEL = customCmds.LEVEL
+local CMD_SMOOTH = customCmds.SMOOTH
+local CMD_RAW_BUILD = customCmds.RAW_BUILD
 local terraunitDefID = UnitDefNames['terraunit'].id
-
 
 local passiveCommands = {
     [CMD_PRIORITY] = true
@@ -488,7 +498,7 @@ function widget:Update()
     -- local nexOrder = queue[2]
     -- local third = queue[3]
     -- -- Echo("QUEUE #"..queueCount.."=>", ((curOrder and curOrder.id and curOrder.id..(curOrder.params[1] and ','..curOrder.params[1]..' #'..#curOrder.params or '')) or '')
-    -- Echo("QUEUE #"..queueCount..(curOrder and curOrder.id and "=>"..curOrder.id..'('..cmdNames[curOrder.id]..'):'..(curOrder.params[1] and table.concatsep(curOrder.params) or '') or '')
+    -- Echo("QUEUE #"..queueCount..(curOrder and curOrder.id and "=>"..curOrder.id..'('..cmdNames[curOrder.id]..'):'..(curOrder.params[1] and table.concat(curOrder.params, ', ') or '') or '')
     --     .. ((nexOrder and nexOrder.id and " | NEXT: "..nexOrder.id..'('..cmdNames[nexOrder.id]..'):'..(nexOrder.params[1] and ','..nexOrder.params[1]..' #'..#nexOrder.params or '')) or '')
     --     .. ((third and third.id and " | THIRD: "..third.id..'('..cmdNames[third.id]..'):'..(third.params[1] and ','..third.params[1]..' #'..#third.params or '')) or '')
     --     )
@@ -504,19 +514,19 @@ function widget:Update()
 
                 spGiveOrderToUnit(CMD_REMOVE,unitID, order.tag,0)
                 -- if debugSel then
-                    Echo('remove auto guard from Update')
+                --     Echo('remove auto guard from Update')
                 -- end
                 local before = queue[i-1]
                 if before then
                     if before.id == CMD_REPAIR then
                         spGiveOrderToUnit(CMD_REMOVE,unitID, before.tag,0)
                         -- if debugSel then
-                            Debug.autoguard('remove repair order from update')
+                        --     Debug.autoguard('remove repair order from update')
                         -- end
                     elseif before.id == CMD_RAW_MOVE  then
                         spGiveOrderToUnit(CMD_REMOVE,unitID, before.tag,0)
                         -- if debugSel then
-                            Debug.autoguard('remove raw move order from update')
+                        --     Debug.autoguard('remove raw move order from update')
                         -- end
                     end
                 end
@@ -549,7 +559,7 @@ function widget:Update()
             -- else
             --     local str = remove(order,1) .. ': \n'
             --     remove(order,1) ; remove(order,1)
-            --     unit.text = str .. table.concatsep(order)
+            --     unit.text = str .. table.concat(order,',')
 
             -- end
             unit.actualCmd, unit.expectedCmd = false, false
@@ -584,7 +594,7 @@ function widget:GameFrame(gf)
 
             --     local str = remove(order,1) .. ': \n'
             --     remove(order,1) ; remove(order,1)
-            --     unit.text = str .. table.concatsep(order)
+            --     unit.text = str .. table.concat(order, ', ')
             -- end
 
             unit.actualCmd, unit.expectedCmd = false, false
@@ -683,7 +693,7 @@ function NotifyExecute(id,cmd,params,opts,tag,fromCmdDone,fromLua,realcmd,realpa
     -- Echo("notify execute, cmd", cmd,'realcmd',realcmd,'expectedCmd', unit.expectedCmd, 'realparams',realparams,unpack(params))
     -- Echo(id..' is executing '..cmd, unpack(params))
     -- local rparams = table.round(params,true)
-    -- local str = cmdNames[realcmd or cmd] .. '(' .. (realcmd or cmd) .. ') : \n' .. (realcmd~=cmd and '...' or table.concatsep(rparams))
+    -- local str = cmdNames[realcmd or cmd] .. '(' .. (realcmd or cmd) .. ') : \n' .. (realcmd~=cmd and '...' or table.concat(rparams, ', '))
     
     if unit.building then
         
@@ -1038,7 +1048,7 @@ function widget:UnitCommand(id, defID, teamID, cmd, params, opts, playerID,  tag
         -- Echo(id,'unit is on auto guard,manual ?',unit.manual)
     end
     -- Echo("cmd,place is ", cmd,place)
-    if isBuildingCommand[cmd] and not fromLua then
+    if not fromLua and isBuildingCommand[cmd] then
         -- if --[[place==1 and --]]unit.expectedCmd == CMD_LEVEL then
         --     unit.expectedCmd = cmd
         -- end
@@ -1215,7 +1225,7 @@ function WidgetInitNotify(w,name,preloading)
         return
     end
     if name == 'UnitsIDCard' then
-        Units = WG.UnitsIDCard
+        Units = WG.UnitsIDCard.units or WG.UnitsIDCard -- compat with the old Hel-K
         widgetHandler:Wake(widget)
     end
     callbacksExec[name] = w.NotifyExecute
@@ -1255,9 +1265,9 @@ function widget:Initialize()
     -- widget.Update = AfterWidgetsLoaded
 
     -- WG.Dependancies:Check(widget)
-    Units = WG.UnitsIDCard
+    Units = WG.UnitsIDCard.units or WG.UnitsIDCard -- compat with the old Hel-K
     -- if WG.UnitsIDCard then
-    --     Units = WG.UnitsIDCard
+    --     Units = WG.UnitsIDCard.units
     --     Echo('Command Tracker use UnitsIDCard, active ? ',Units.active)
     -- else
     --     Echo("Command Tracker don't use UnitsIDCard")
@@ -1374,7 +1384,7 @@ do -- debugging
     local glPushMatrix                  = gl.PushMatrix
     local glPopMatrix                   = gl.PopMatrix
     local green,              yellow,           red,         white,         blue,           orange ,        turquoise,          paleblue
-        = f.COLORS.green, f.COLORS.yellow, f.COLORS.red, f.COLORS.white, f.COLORS.blue, f.COLORS.orange,  f.COLORS.turquoise, f.COLORS.paleblue
+        = COLORS.green, COLORS.yellow, COLORS.red, COLORS.white, COLORS.blue, COLORS.orange,  COLORS.turquoise, COLORS.paleblue
 
 
     function widget:DrawWorld()
@@ -1426,3 +1436,4 @@ do -- debugging
     end
 end
 f.DebugWidget(widget)
+
