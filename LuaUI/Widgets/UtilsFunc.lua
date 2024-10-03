@@ -49,15 +49,19 @@ local loadstring 		= loadstring
 local char				= string.char
 local os				= os
 local io				= io
-local CMD 		   = CMD
-local Game 		   = Game
+
+local clock        = os.clock
 local UnitDefs 	   = UnitDefs
 local UnitDefNames = UnitDefNames
 local FeatureDefs  = FeatureDefs
-local WG 		   = WG
-local clock 	   = os.clock
+
+local LUAUI_DIRNAME     = LUAUI_DIRNAME
 
 local gl 		   = gl
+local WG           = WG
+local VFS          = VFS
+local CMD          = CMD
+local Game         = Game
 
 local glVertex     = gl.Vertex
 
@@ -1349,6 +1353,66 @@ validPlacement = function(px,pz,defs) -- explained version
 						 -- impair: (de 0 à 16 => 8, de 16 à 32 => 24)
 	return px,pz
 end
+
+function GetFloatingInfo(unitDefID, facing)
+    local offFacing = (facing == 1 or facing == 3)
+    local placeTable = (offFacing and placementCacheOff) or placementCache
+    if not placeTable[unitDefID] then
+        local ud = UnitDefs[unitDefID]
+        local sx = ud.xsize*8
+        local sz = ud.zsize*8
+        if offFacing then
+            sx, sz = sz, sx
+        end
+        local oddx, oddz = (sx/2)%16, (sz/2)%16
+
+        return 
+    end
+end
+floatPlacingInfo = (function()
+    local t = {}
+    local spuGetMoveType = Spring.Utilities.getMovetype
+    for defID, def in pairs(UnitDefs) do
+        --[[
+            Note:
+            -floatOnWater is only correct for buildings (at the notable exception of turretgauss) and flying units
+            -canMove and isBuilding are unreliable:
+               staticjammer, staticshield, staticradar, factories... have 'canMove'
+               staticcon, striderhub doesn't have... 'isBuilding'
+            -isGroundUnit is reliable
+            -spuGetMoveType is better as it discern also between flying (1) and building (false)
+            -ud.maxWaterDepth is only correct for telling us if a non floating building can be a valid build undersea
+            -ud.moveDef.depth is always correct about units except for hover
+            -ud.moveDef.depthMod is 100% reliable for telling if non flying unit can be built under sea, on float or only on shallow water:
+               no depthMod = flying or building,
+               0 = walking unit undersea,
+               0.1 = sub, ship or hover,
+               0.02 = walking unit only on shallow water
+        --]]
+        local isUnit = spuGetMoveType(def) -- 1 == flying, 2 == on ground/water false = building
+        local depthMod = isUnit and def.moveDef.depthMod
+
+        local floatOnWater = def.floatOnWater
+        local gridAboveWater = floatOnWater or isUnit -- that's what the engine relate to, with a position based on trace screen ray that has floatOnWater only, which offset the grid for units
+        local underSea = depthMod == 0 or not (isUnit or floatOnWater or def.maxWaterDepth == 0)
+        local reallyFloat = isUnit == 2 and depthMod == 0.1 or floatOnWater and def.name ~= 'turretgauss'
+        local cantPlaceOnWater = not (underSea or reallyFloat)
+
+
+        t[defID] = {
+            underSea = underSea,
+            reallyFloat = reallyFloat,
+            cantPlaceOnWater = cantPlaceOnWater,
+            gridAboveWater = gridAboveWater, -- following the wrong engine grid 
+            floatOnWater = floatOnWater,
+        }
+    end
+    return t
+end)()
+
+
+
+
 canSub ={
 	striderantiheavy=true
 	,subtacmissile=true
@@ -4185,6 +4249,108 @@ end
 
 ------------------ FUNCTIONMENT -------------------------
 
+function Requires(widget, reqs)
+    local sig = '[' ..widget:GetInfo().name .. ']:'
+    for thing, list in pairs(reqs) do
+        if thing == 'widget' then
+            for k, v in pairs(list) do
+                local name = k
+                if not widgetHandler:FindWidget(name) then
+                    if v[2] then
+                        Echo(sig .. 'Warn:'..(v[1] or ' Works better with ' .. name))
+                    else
+                        widget.status = v[1] or 'Requires ' .. name
+                        Echo(sig .. (widget.status or ''))
+                        if widget.whInfo then
+                            widgetHandler:RemoveWidget(widget)
+                        end
+                        return false
+                    end
+                end
+            end
+        elseif thing == 'exists' then
+            for filename, v in pairs(list) do
+                if not VFS.FileExists(filename, v[1]) then
+                    if v[3] then
+                        Echo(sig .. 'Warn:'..(
+                                v[2] or
+                                ' Works better with ' 
+                                .. (v[1] and v[1] == VFS.RAW and 'local version of ' or '') 
+                                .. filename:gsub(WIDGET_DIRNAME,'')
+                            )
+                        )
+                    else
+                        widget.status = v[2] or
+                                        'Requires '
+                                        .. (v[1] and v[1] == VFS.RAW and 'local version of ' or '') 
+                                        .. filename:gsub(WIDGET_DIRNAME,'')
+                        Echo(sig .. (widget.status or ''))
+                        if widget.whInfo then
+                            widgetHandler:RemoveWidget(widget)
+                        end
+                        return false
+                    end
+                end
+            end
+        elseif thing == 'value' then
+            for code, v in pairs(list) do
+
+                if type(code) ~= 'string' then
+                    error('wrong type, code must be a string :\n' .. tostring(v[1]) ..'\n Traceback: \n' .. debug.traceback())
+                end
+                local chunk, err = loadstring('return ' .. code)
+                if err then
+                    error('Invalid code string to load :\n' .. err ..'\n  Traceback: \n' .. debug.traceback())
+                    return false
+                end
+                setfenv(chunk, widget)
+                local valid, pass = pcall(chunk)
+                if not (valid and pass) then
+                    if v[2] then
+                        Echo(sig .. 'Warn:'..(v[1] or ' Works better with ' .. code))
+                    else
+                        widget.status = v[1] or 'Requires ' .. code
+                        Echo(sig .. (widget.status or ''))
+                        if widget.whInfo then
+                            widgetHandler:RemoveWidget(widget)
+                        end
+                        return false
+                    end
+                end
+            end
+        end
+    end
+    return true
+end
+--[[ Demo
+    -- run WG.TestMe(widget) in the body of the widget, then it should check things at Initialization and remove the widget with a message
+    -- make sure to not override widget:Initialize() after in the body
+    WG.TestMe = function(widget)
+        local mode = VFS.RAW -- mode can be nil
+        local reqs = {
+            widget = {
+                ['HasViewChanged'] = {'Requires -HasViewChanged.lua'},
+                ['Some_better_thing'] = {'Would be working better using a better thing', true},
+            },
+            exists = {
+                [LUAUI_DIRNAME .."Widgets/-HasViewChanged.lua"] = {mode, 'Requires -HasViewChanged.lua'},
+            },
+
+            value = { -- value must be a string that will be evaluated at call of Requires during initialization
+                ['pairs'] = {'You should have that thing'},
+                ['that.thing'] = {nil, true},
+                ['that.other.thing or (function() return false end)()'] = {'You didn\'t have anything'},
+            }
+        }
+
+        function widget:Initialize()
+            if not Requires(widget, reqs) then
+                return
+            end
+            -- normal initialization ...
+        end
+    end
+--]]
 
 
 
@@ -7014,6 +7180,7 @@ end
 
 WG.GetIconMidY      = GetIconMidY
 WG.iconSizeByDefID  = iconSizeByDefID
+WG.floatPlacingInfo = floatPlacingInfo
 
 wid = GetWidgetInfos()
 
