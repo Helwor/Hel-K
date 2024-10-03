@@ -6309,7 +6309,35 @@ end
 
 
 -------------------------------------------- UNITS ------------------------------------------
+iconSizeByDefID, GetIconMidY = false, function() end
+do
+    iconSizeByDefID = {}
+    local iconTypesPath = LUAUI_DIRNAME .. "Configs/icontypes.lua"
+    local icontypes = VFS.FileExists(iconTypesPath) and VFS.Include(iconTypesPath)
+    local _, iconFormat = VFS.Include(LUAUI_DIRNAME .. "Configs/chilitip_conf.lua" , nil, VFS.ZIP_FIRST)
+    for defID,def in ipairs(UnitDefs) do
+        if def.name == 'shieldbomb' then
+            iconSizeByDefID[defID] = 1.8
+        else
+            iconSizeByDefID[defID] = ( icontypes[(def.iconType or "default")] ).size or 1.8
+        end
+    end
+    iconSizeByDefID[0] = icontypes[("default")].size or 1.8
+    
+    function GetIconMidY(defID,y,gy,distFromCam) -- FIXME this is from trial and error, can be perfected
+        local iconWorldHeight = iconSizeByDefID[defID]  * 22 * (1+ (distFromCam-7000)/10000 )
+        if distFromCam <= 1000 then
+            iconWorldHeight = iconWorldHeight * (0.2 + 0.8 * distFromCam / 1000)
+        end
 
+        if y-gy<iconWorldHeight then
+            -- Echo('y: ' .. y .. ' => ' .. gy + iconWorldHeight)   
+            y = gy + iconWorldHeight
+        end
+        -- Echo('icon size mult',iconSizeByDefID[defID],cx,cy,cz,"distFromCam is ", distFromCam,'size on screen', vsy * (20/distFromCam))
+        return y
+    end
+end
 
 function GetUnitsInOrientedRectangle(p1,p2,width)
 	local spGetUnitPosition = sp.GetUnitPosition
@@ -6983,6 +7011,9 @@ function GetCameraHeight(cs)
     end
     return height
 end
+
+WG.GetIconMidY      = GetIconMidY
+WG.iconSizeByDefID  = iconSizeByDefID
 
 wid = GetWidgetInfos()
 
