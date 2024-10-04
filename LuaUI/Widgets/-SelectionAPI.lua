@@ -300,12 +300,12 @@ function widget:CommandsChanged()
 
 		local count = 0
 		selectionDefID[defID] = t
-		t.count = count
 		for i, id in ipairs(t) do
 			selectionMap[id] = defID
 			selection[totalCount + i] = id
 			count = count + 1
 		end
+        t.count = count
 		totalCount = totalCount + count
 
 
