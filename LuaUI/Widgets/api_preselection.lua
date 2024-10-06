@@ -141,7 +141,7 @@ local PreSelection_GetUnitUnderCursor = function (onlySelectable, ignoreSelectio
 		local modSel = EzTarget.s.moddedSelect
 		local poses = EzTarget.poses
 		-- Echo("modSel or modTarget is ", modSel,modSel and poses[modSel], modTarget, modTarget and poses[modTarget])
-		if modSel or modTarget then
+		if modSel or (modTarget and modTarget ~= EzTarget.v.defaultTarget) then
 			type = 'unit'
 			id = ((modSel and poses[modSel][3] or 1000)) < ((modTarget and poses[modTarget][3]) or 1000) and modSel or modTarget
 			-- Echo(modSel, modTarget,"pick => ", id)
