@@ -540,7 +540,7 @@ function widget:Update()
 					-- Echo(Spring.GetActiveCommand())
 				end
 			end
-			if options.ctrl_use.value == '2' then
+			if reverse and (options.ctrl_use.value == '2' or WG.InitialQueue) then
 				reverse = false
 			end
 		end
@@ -551,7 +551,7 @@ end
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
 
-function widget:KeyPress(key, mods, isRepeat, label, unicode)
+function widget:KeyPress(key, mods, isRepeat)
 	if isRepeat then
 		return
 	end
