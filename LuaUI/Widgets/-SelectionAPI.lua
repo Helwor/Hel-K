@@ -148,7 +148,15 @@ for defID, def in pairs(UnitDefs) do
 	end
 end
 
-
+------
+local isCommDefID = {}
+for defID, def in pairs(UnitDefs) do
+	local name = def.name
+	if (name:find('^dyn') or name:find('c%d+_base') or name:find('com%d+$') or name:find('comm') or name:find('^hero')) then 
+		isCommDefID[defID] = true
+	end
+end
+------
 
 
 
@@ -281,12 +289,14 @@ function widget:CommandsChanged()
 	local hasGunship, hasKrow, hasRev, hasAthena, hasOnlyAthena = false, false, false, false, false
 	local hasAirAttacker, hasAirDgun = false, false
 
+
 	local hasBomb = false
 
 	local hasPuppy, hasWidow, hasImpaler = false, false, false
 
 	local hasImmobile, hasTurret = false, false
 
+	local hasComm = false
 	local hasDgunCom = false
 
 	-- local isSmall -- defined at the end
@@ -331,7 +341,8 @@ function widget:CommandsChanged()
 			if not hasTurret and turretDefID[defID] then
 				hasTurret = true
 			end
-
+		elseif isCommDefID[defID] then
+			hasComm = true
 		elseif gunshipDefID[defID] then
 			hasGunship = true
 			if not hasKrow and defID == krowDefID then
@@ -408,7 +419,7 @@ function widget:CommandsChanged()
 	mySelection .hasTurret      = hasTurret
 
 	mySelection.hasBomb         = hasBomb
-
+	mySelection.hasComm			= hasComm
 	mySelection.hasDgunCom      = hasDgunCom
 
 	mySelection.count 			= totalCount
