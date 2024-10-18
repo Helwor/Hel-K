@@ -83,16 +83,18 @@ local spGetModKeyState = Spring.GetModKeyState
 -- local icontypes = VFS.FileExists(iconTypesPath) and VFS.Include(iconTypesPath)
 
 local CMD_INSERT, CMD_OPT_ALT, CMD_OPT_SHIFT, CMD_OPT_INTERNAL = CMD.INSERT, CMD.OPT_ALT, CMD.OPT_SHIFT, CMD.OPT_INTERNAL
-local CMD_OPT_RIGHT = CMD.OPT_RIGHT
-local CMD_MOVE, CMD_ATTACK, CMD_REMOVE = CMD.MOVE, CMD.ATTACK, CMD.REMOVE
-local CMD_GUARD, CMD_REPAIR = CMD.GUARD,CMD.REPAIR
-local CMD_LOAD_ONTO = CMD.LOAD_ONTO
-local CMD_MANUALFIRE = CMD.MANUALFIRE
-local CMD_RESURRECT = CMD.RESURRECT
-local CMD_RECLAIM = CMD.RECLAIM
-local CMD_MOVE = CMD.MOVE
-local CMD_UNLOAD_UNITS = CMD.UNLOAD_UNITS
-local CMD_LOAD_UNITS = CMD.LOAD_UNITS
+local CMD_REMOVE = CMD.REMOVE
+local CMD_OPT_RIGHT 		= CMD.OPT_RIGHT
+local CMD_MOVE, CMD_ATTACK = CMD.MOVE, CMD.ATTACK
+local CMD_GUARD				= CMD.GUARD
+local CMD_REPAIR 			= CMD.REPAIR
+local CMD_LOAD_ONTO	 		= CMD.LOAD_ONTO
+local CMD_MANUALFIRE	 	= CMD.MANUALFIRE
+local CMD_RESURRECT	 		= CMD.RESURRECT
+local CMD_RECLAIM	 		= CMD.RECLAIM
+local CMD_MOVE	 			= CMD.MOVE
+local CMD_UNLOAD_UNITS	 	= CMD.UNLOAD_UNITS
+local CMD_LOAD_UNITS	 	= CMD.LOAD_UNITS
 
 local customCmds = VFS.Include("LuaRules/Configs/customcmds.lua")
 local CMD_AIR_MANUALFIRE                = customCmds.AIR_MANUALFIRE
@@ -485,6 +487,7 @@ options.suppressRepairCloaked = {
 }
 options.findStaticRepair = {
 	name = 'Find static building to repair',
+	desc = 'Except if holding Comm in selection and building only need repair and not to be finished',
 	type = 'bool',
 	value = opt.findStaticRepair,
 	noHotkey = true,
@@ -762,7 +765,7 @@ local mempoints = {n=0}
 selContext.hasValidAttacker, selContext.hasAirAttacker, selContext.hasControllableRepairer = false, false, false
 selContext.lobsters, selContext.hasDgunOnAlt, selContext.hasJumper, selContext.hasPuppy = false, false, false, false
 selContext.hasTransport = false
-
+selContext.hasComm = false
 v.lastAcquiredSelect = false
 v.mousePressed = false
 local controllableRepairersMap = {}
@@ -1035,7 +1038,6 @@ local function Evaluate(type, id, engineCmd)
 	-- end
 	v.moddedTarget, s.moddedSelect =  EzTarget(wantTarget and not v.noHelperTarget, wantSelect, selContext.hasAirAttacker)
 
-
 	if v.moddedTarget and v.clamped then
 		-- local dist = poses[v.moddedTarget][3]
 
@@ -1108,14 +1110,19 @@ local function Evaluate(type, id, engineCmd)
 
 	-- Force Ctrl Move
 	if ctrl then
-		if v.defaultCmd == CMD_ATTACK then
-			if (not opt.allowQueueing or not shift) and opt.forceCtrlMove then
-				-- force Ctrl Move
-				v.moddedCmd = CMD_RAW_MOVE
-				v.moddedTarget = false
-				return v.moddedCmd
+		if opt.forceCtrlMove then
+			if (not opt.allowQueueing or not shift)  then
+				if v.defaultCmd == CMD_ATTACK or v.moddedCmd == CMD_ATTACK then
+						-- force Ctrl Move
+						v.moddedCmd = CMD_RAW_MOVE
+						v.moddedTarget = false
+						return v.moddedCmd
+				elseif v.moddedCmd == CMD_RAW_MOVE then
+					return v.moddedCmd
+				end
 			end
 		end
+		-- return v.cmdOverride or v.moddedCmd
 	end
 
 
@@ -1128,7 +1135,6 @@ local function Evaluate(type, id, engineCmd)
 
 
 	----- managing behaviours with alt that require active command
-
 
 	if alt then
 		if selContext.hasJumper then
@@ -1236,7 +1242,7 @@ local function Evaluate(type, id, engineCmd)
 
 	----- managing non alt behaviour
 
-	if not (alt or shift or ctrl) then
+	if not (alt or --[[shift or--]] ctrl) then
 		-- switch selection (not alt) static build/unit under cursor
 		local modSelChanged = false
 		if modSelDefID then
@@ -1319,16 +1325,16 @@ local function Evaluate(type, id, engineCmd)
 					for i,id in ipairs(minesByDist) do
 						if not controllableRepairersMap[id] or controllableRepairersMap.n>1 then
 							local defID = mines[id]
-							if staticBuildingDefID[defID] then
+							-- if staticBuildingDefID[defID] then
 								local hp,maxhp,_,_,bp = spGetUnitHealth(id)
-								if hp < maxhp then
+								if bp < 1 or hp < maxhp and staticBuildingDefID[defID] and not selContext.hasComm then
 								-- if bp < 1 then
 									buildToFinish = id
 									break
 								-- elseif not buildToFinish and not onSelf and hp<maxhp then
 								-- 	buildToFinish = id
 								end
-							end
+							-- end
 						end
 					end
 					if buildToFinish then
@@ -1342,6 +1348,13 @@ local function Evaluate(type, id, engineCmd)
 	end
 	--
 	-- Echo("buildToFinish is ", buildToFinish)
+	-- if ctrl and engineCmd ~= CMD_RECLAIM then -- ?? verify why, dont rmb (for ctrl move)
+	-- 	if not shift or engineCmd~=CMD_ATTACK or not opt.allowQueueing then
+	-- 		v.moddedTarget = false
+	-- 		v.moddedCmd = CMD_RAW_MOVE
+	-- 		return v.moddedCmd
+	-- 	end
+	-- end
 
 	v.moddedCmd = (v.moddedTarget or v.defaultTarget) and (
 			(builderToGuard or unitToGuard) and CMD_GUARD
@@ -1349,7 +1362,10 @@ local function Evaluate(type, id, engineCmd)
 			or buildToFinish and CMD_REPAIR
 			or canTransport and alt and (canLoadLight or canLoadHeavy) and CMD_LOAD_UNITS
 			or not (isAllied or isMine) and commandMap['Attack'] and CMD_ATTACK
-			or engineCmd == CMD_GUARD and v.defaultTarget and CMD_RAW_MOVE
+			or engineCmd == CMD_GUARD and v.defaultTarget and (
+				v.moddedTarget and CMD_ATTACK
+				or CMD_RAW_MOVE
+			)
 		)
 		or not alt and (
 				engineCmd == CMD_GUARD
@@ -1377,9 +1393,6 @@ local function Evaluate(type, id, engineCmd)
 
 
 
-	if ctrl and engineCmd ~= CMD_RECLAIM then -- ?? verify why, dont rmb
-		return v.cmdOverride
-	end
 
 	if not (v.moddedCmd)  then
 		-- Echo('...', engineCmd, alt)
@@ -1508,6 +1521,7 @@ function widget:CommandsChanged()
 
 	selContext.hasDgunOnAlt                 = hasDgunOnAlt
 
+	selContext.hasComm						= mySelection.hasComm
 	selContext.hasValidAttacker             = hasValidAttacker
 
 	selContext.hasControllableRepairer      = hasControllableRepairer
@@ -1815,7 +1829,9 @@ function widget:MousePress(mx,my,button)
 		-- return
 		
 		-- on shift + left click set target
-		if (shift--[[ or alt--]] and opt.shiftLClickSetTarget) and (v.moddedCmd == CMD_ATTACK or v.defaultCmd==CMD_ATTACK) then
+		if (shift--[[ or alt--]] and opt.shiftLClickSetTarget)
+		and (v.moddedCmd == CMD_ATTACK or v.defaultCmd==CMD_ATTACK)
+		then
 		-- if (shift) and commandMap['Set Target'] and v.moddedCmd == CMD_ATTACK or  then
 			v.acquiredTarget = v.moddedTarget or v.defaultTarget
 			local tgt = v.acquiredTarget and Units[v.acquiredTarget]
@@ -1880,9 +1896,9 @@ function widget:MousePress(mx,my,button)
 	-- Echo("nameDefCom is ", nameDefCom)
 	local _, activeCmdID,  _, namecom = spGetActiveCommand() 
 	-- Echo("activeCmdID, namecom is ", activeCmdID, namecom)
-	if namecom=='Attack' then
-		-- Echo('namecom is Attack in EzTarget !',os.clock())
-	end
+	-- if namecom=='Attack' then
+	-- 	Echo('namecom is Attack in EzTarget !',os.clock())
+	-- end
 
 	if namecom and namecom == v.moddedActiveCommand then
 		-- when default command and active command are the same and right button is pressed, we remove the active command so the default command will be executed-
@@ -1896,8 +1912,13 @@ function widget:MousePress(mx,my,button)
 
 	if not v.clamped then 
 		if nameDefCom ~= 'staticmex'  and v.moddedCmd~=CMD_UNLOAD_UNITS  then
-			if not (selContext.hasValidAttacker or (selContext.hasControllableRepairer or commandMap[CMD_UNLOAD_UNITS]) and v.moddedTarget) --[[or (alt and not sel[2])--]]
-				or not (v.moddedTarget or (v.defaultTarget --[[or v.defaultCmd == 'Attack'--]] ) and opt.cancelWhenDragOnDefault) then
+			if not (
+				selContext.hasValidAttacker
+				or v.defaultCmd == CMD_REPAIR and opt.cancelWhenDragOnDefault
+				or (selContext.hasControllableRepairer or commandMap[CMD_UNLOAD_UNITS]) and v.moddedTarget
+			)
+			or opt.cancelWhenDragOnDefault and not (v.moddedTarget or v.defaultTarget or v.defaultCmd == CMD_REPAIR)
+			then
 
 				-- if nameDefCom == 'Attack' then
 				--     local t = {'COCO',"nameDefCom is ", nameDefCom, v.moddedTarget, v.defaultTarget,
@@ -1905,7 +1926,7 @@ function widget:MousePress(mx,my,button)
 				--     for i=1, #t do t[i] = tostring(t[i]) end
 				--     Echo(table.concat(t, ', '))
 				-- end
-				WG.cmdOverride = nameDefCom
+				-- WG.cmdOverride = nameDefCom
 
 				return
 			end
@@ -2035,7 +2056,7 @@ function widget:MouseRelease(mx,my,button)
 		Debug.CF2("CF2 took over")
 		return cf2.CF2:MouseRelease(mx,my,button)
 	else
-		if v.acquiredTarget or v.clamped or v.defaultCmd == buildMexDefID then
+		if v.acquiredTarget or v.clamped or v.defaultCmd == buildMexDefID or v.defaultCmd == CMD_REPAIR then
 			Debug.CF2("processing on release...")
 			-- tell CustomFormation2 to cancel the operation by giving it the opposite button
 			local cancel = Execute(mx, my, button)
@@ -2113,9 +2134,23 @@ Execute = function(mx, my) -- execute a single target cmd if CF2 didnt take over
 		if wh:CommandNotify(v.defaultCmd,pos,opts) then
 			return true
 		else
-			spGiveOrder(cmd,TARGET_TABLE,opts.coded)
+			spGiveOrder(v.defaultCmd,pos,opts.coded)
 			return true
 		end
+	elseif v.defaultCmd == CMD_REPAIR then
+		local type, id = spTraceScreenRay(mx,my,false,true,true,false)
+		if not id or type ~= 'unit' then
+			return
+		end
+		TARGET_TABLE[1] = id
+		if wh:CommandNotify(v.defaultCmd,TARGET_TABLE,opts) then
+			return true
+		else
+			spGiveOrder(v.defaultCmd,id,opts.coded)
+			return true
+		end
+
+
 	end
 	local cmd = v.moddedCmd or v.defaultCmd
 
@@ -2831,6 +2866,7 @@ end
 
 function widget:ViewResize(x,y)
 	vsx, vsy = x,y
+
 end
 
 f.DebugWidget(widget)
