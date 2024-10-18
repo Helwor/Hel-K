@@ -361,8 +361,8 @@ function widget:CommandsChanged()
 				hasBomber = true
 			end
 			hasPlane = true
-
-		elseif jumperDefID[defID] then
+		end
+		if jumperDefID[defID] then
 			if jumpers == EMPTY_TABLE then
 				jumpers = {}
 			end
