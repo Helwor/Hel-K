@@ -3,7 +3,7 @@ function widget:GetInfo()
 	return {
 		name      = "Chili Crude Player List",
 		desc      = "An inexpensive playerlist.",
-		author    = "GoogleFrog",
+		author    = "GoogleFrog, Helwor fixes, improvements, enhancements",
 		date      = "8 November 2019",
 		license   = "GNU GPL, v2 or later",
 		layer     = 50,
