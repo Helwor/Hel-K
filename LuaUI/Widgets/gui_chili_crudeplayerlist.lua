@@ -74,7 +74,9 @@ local IMAGE_PING   = ":n:" .. LUAUI_DIRNAME .. "Images/playerlist/ping.png"
 local IMAGE_METAL  = 'LuaUI/Images/ibeam.png'
 local IMAGE_ENERGY = 'LuaUI/Images/energy.png'
 local defaultamount = 100 -- default amount to give to ally player
-
+local CONTINUE = {energy = {time = 0, target = false, next_time = 0}, metal = {time = 0, target = false, next_time = 0}}
+local CONTINUE_TIME = 10 -- how long last the continued sharing
+local CONTINUE_FREQUENCY = 1 
 local HIDDEN_STORAGE = 10000
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
@@ -172,33 +174,46 @@ local function ShareUnits(playername, teamID)
 	end
 	Spring.ShareResources(teamID, "units")
 end
-local function GetResource(target,kind)
+local function GetResource(target, kind)
 	local tgtCurr, tgtStor = Spring.GetTeamResources(target, kind)
 	tgtStor = tgtStor - HIDDEN_STORAGE
 	local maxfill =  tgtStor - tgtCurr
 	return tgtCurr, tgtStor, maxfill
 end
-local function GiveResource(target,kind) -- directly copied from gui_chili_share.lua, the TAB playlist
+local function GiveResource(target, kind, mod, quiet) -- directly copied from gui_chili_share.lua, the TAB playlist
 	--mod = 20,500,all
-	local mod
-	local alt,ctrl,_,shift = Spring.GetModKeyState()
-	if alt then mod = "all"
-	elseif ctrl then mod = defaultamount/5
-	elseif shift then mod = defaultamount*5
-	else mod = defaultamount end
+	if not mod then
+		local alt,ctrl,_,shift = Spring.GetModKeyState()
+		if alt and shift then
+			mod = "continue"
+		elseif alt then
+			mod = "all"
+		elseif ctrl then
+			mod = defaultamount/5
+		elseif shift then
+			mod = defaultamount*5
+		else
+			mod = defaultamount
+		end
+	end
 	local _, leader, _, isAI = Spring.GetTeamInfo(target, false)
 	local name = select(1,Spring.GetPlayerInfo(leader, false))
 	if isAI then
 		name = select(2,Spring.GetAIInfo(target))
 	end
-	local playerslist = Spring.GetPlayerList(target,true)
+	local playerslist = Spring.GetPlayerList(target, true)
 	if #playerslist > 1 then
 		name = name .. "'s squad"
 	end
 	local num = 0
-	local currentResourceValue = Spring.GetTeamResources(select(1,Spring.GetMyTeamID(),kind))
-
-	if mod == "all" then
+	local currentResourceValue = Spring.GetTeamResources(select(1, Spring.GetMyTeamID(), kind))
+	if mod == "continue" then
+		CONTINUE[kind] = {time = os.clock() + CONTINUE_TIME, target = target, next_time = os.clock() + CONTINUE_FREQUENCY}
+		if not quiet then
+			Spring.SendCommands("say a: Giving continued " .. kind .. " to " .. name .. " for " .. CONTINUE_TIME .. " seconds.")
+			quiet = true
+		end
+	elseif mod == "all" then
 		num = currentResourceValue
 	elseif mod ~= nil then
 		num = math.min(mod, currentResourceValue)
@@ -210,21 +225,26 @@ local function GiveResource(target,kind) -- directly copied from gui_chili_share
 	local tgtCurr, tgtStor, maxfill = GetResource(target, kind)
 
 	if tgtStor <= 0 then
-		Echo(name .. " don't have " .. kind .. ' storage')
+		if not quiet then
+			Echo(name .. " don't have " .. kind .. ' storage')
+		end
 		return
 	end
 
 	if maxfill <= 0 then
-		Echo(name .. "'s " .. kind .. ' storage is full')
+		if not quiet then
+			Echo(name .. "'s " .. kind .. ' storage is full')
+		end
 		return
 	end
 
 	if num > maxfill then
 		num = maxfill
 	end
-
-	Spring.SendCommands("say a: I gave " .. math.floor(num) .. " " .. kind .. " to " .. name .. ".")
-	Spring.ShareResources(target,kind,num)
+	if not quiet then
+		Spring.SendCommands("say a: I gave " .. math.floor(num) .. " " .. kind .. " to " .. name .. ".")
+	end
+	Spring.ShareResources(target, kind, num)
 end
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
@@ -1161,6 +1181,18 @@ options = {
 
 local lastUpdate = 0
 function widget:Update(dt)
+	for kind, cont in pairs(CONTINUE) do
+		if cont.target then
+			local now = os.clock()
+			if cont.next_time < now then
+				cont.next_time = now + 1
+				GiveResource(cont.target, kind, 'all', true)
+				if cont.time < now then
+					cont.target = false
+				end
+			end
+		end
+	end
 	lastUpdate = lastUpdate + dt
 	if lastUpdate < UPDATE_PERIOD then
 		return
