@@ -62,9 +62,9 @@ local playerInfo
 local ALLY_COLOR  = {0, 1, 1, 1}
 local ENEMY_COLOR = {1, 0, 0, 1}
 
-local PING_TIMEOUT = 2000 -- ms
+local PING_TIMEOUT = 2 -- seconds
 
-local MAX_NAME_LENGTH = 130
+local MAX_NAME_LENGTH = 100
 
 local UPDATE_PERIOD = 1
 local DEFAULT_TEXT_HEIGHT = 13
@@ -235,7 +235,7 @@ local function UpdateEntryData(entryData, controls, pingCpuOnly, forceUpdateCont
 	local newIsWaiting = entryData.isWaiting
 	local newIsConnecting = connecting
 	local isSpectator = false
-	local resortRequired = false
+	local resortRequired, updateColors = false, false
 	if entryData.playerID then
 		local playerName, active, spectator, teamID, allyTeamID, pingTime, cpuUsage, country, rank, customKeys = spGetPlayerInfo(entryData.playerID, true)
 		if info then
@@ -362,20 +362,27 @@ local function UpdateEntryData(entryData, controls, pingCpuOnly, forceUpdateCont
 	end
 	
 	-- Ping and CPU cannot resort
-	
 	if forceUpdateControls or newTeamID ~= entryData.teamID then
 		entryData.teamID = newTeamID
-		entryData.isMyTeam = (entryData.teamID == myTeamID)
+		entryData.isMyTeam = (newTeamID == myTeamID)
 		resortRequired = true
 		if controls then
 			controls.textName.font.color = GetPlayerTeamColor(entryData.teamID, entryData.isDead)
-			controls.textName:Invalidate()
+ 			controls.textName:Invalidate()
+ 			if not isSpectator then
+				controls.textTeamID.font.color = GetPlayerTeamColor(entryData.teamID, false, entryData.isWaiting)
+				controls.textTeamID:SetCaption(entryData.teamID)
+				controls.textTeamID:Invalidate()
+				updateColors = true
+			end
 		end
 	end
-	
 	if forceUpdateControls or newAllyTeamID ~= entryData.allyTeamID then
 		entryData.allyTeamID = newAllyTeamID
 		resortRequired = true
+		if entryData.isMe then
+			updateColors = true
+		end
 		if controls then
 			-- controls.textAllyTeam:SetCaption(entryData.allyTeamID + 1)
 			controls.textTeamID:SetCaption(entryData.teamID)
@@ -409,8 +416,23 @@ local function UpdateEntryData(entryData, controls, pingCpuOnly, forceUpdateCont
 				controls.textName:Invalidate()
 			end
 		end
+	elseif entryData.isDead and not newIsDead or entryData.isSpec and not isSpectator then -- case cheat when user go from spec to team
+		entryData.isDead = newIsDead
+		entryData.isSpec = isSpectator
+		resortRequired = true
+		if controls then
+
+			controls.textTeamID.font.color = GetPlayerTeamColor(entryData.teamID, false, entryData.isWaiting)
+			controls.textTeamID:SetCaption(entryData.teamID)
+			controls.textTeamID:Invalidate()
+			controls.textName.font.color = GetPlayerTeamColor(entryData.teamID, false)
+			controls.textName:SetCaption(GetName(entryData.name, controls.textName.font, entryData))
+			controls.textName:Invalidate()
+		end
+
 	elseif isSpectator and entryData.isSpec then
 		if forceUpdateControls then
+
 			resortRequired = true
 			if controls then
 				controls.textName.font.color = GetPlayerTeamColor(entryData.teamID, true, entryData.isWaiting)
@@ -428,8 +450,7 @@ local function UpdateEntryData(entryData, controls, pingCpuOnly, forceUpdateCont
 
 	end
 
-	
-	return resortRequired
+	return resortRequired, updateColors
 end
 
 local function GetEntryData(playerID, teamID, allyTeamID, isAiTeam, isDead, isSpec)
@@ -498,7 +519,7 @@ local function GetUserControls(playerID, teamID, allyTeamID, isAiTeam, isDead, i
 	userControls.entryData = GetEntryData(playerID, teamID, allyTeamID, isAiTeam, isDead, isSpec)
 
 	userControls.mainControl = Chili.Control:New {
-		name = playerID,
+		-- name = playerID,
 		x = 0,
 		top = 0,
 		bottom = 0,
@@ -793,6 +814,10 @@ local function Compare(ac, bc)
 		end
 	end
 
+	if a.allyTeamID ~= b.allyTeamID then
+		return a.allyTeamID < b.allyTeamID
+	end
+
 
 	if a.isAiTeam ~= b.isAiTeam then
 		return not a.isAiTeam
@@ -801,9 +826,6 @@ local function Compare(ac, bc)
 	end
 	--
 
-	if a.allyTeamID ~= b.allyTeamID then
-		return a.allyTeamID < b.allyTeamID
-	end
 	
 	if not a.isMyTeam ~= not b.isMyTeam then
 		return b.isMyTeam
@@ -852,9 +874,7 @@ local function SortEntries()
 	
 	local toTop = options.alignToTop.value
 	local offset = options.text_height.value -5
-	-- if toTop then
-	-- 	header.y = 1
-	-- end
+
 	local teams = {}
 	for i = 1, #listControls do
 		local control = listControls[i]
@@ -862,13 +882,13 @@ local function SortEntries()
 		local userData = control.entryData
 		local isPlayer = not userData.isSpec
 		-- local teamTxt = tonumber(listControls[i].textAllyTeam.caption)
-		local teamTxt = tonumber(userData.allyTeamID) + (isPlayer and 1 or 0)
-		local thisTeam = teams[teamTxt]
+		local allyTeam = tonumber(userData.allyTeamID) + (isPlayer and 1 or 0)
+		local thisTeam = teams[allyTeam]
 
 		if not userData.isSpec then
 			if not thisTeam then
 				thisTeam = {}
-				teams[teamTxt] = thisTeam
+				teams[allyTeam] = thisTeam
 				thisTeam.count = 1
 				thisTeam.aiCount = 0
 				if isPlayer then
@@ -918,7 +938,7 @@ local function SortEntries()
 		headerCaption = headerCaption .. countTxt .. (tonumber(t.elo)>0 and ' (' .. ('%.1f'):format(t.elo/(humanPlayers)/1000) .. ') ' or '') .. 'v '
 	end
 	headerCaption = headerCaption:sub(1,-3)
-	if not teams[3] and tonumber(teams[1].elo)>0 and tonumber(teams[2].elo)>0 then
+	if not teams[3] and teams[1] and teams[2] and tonumber(teams[1].elo)>0 and tonumber(teams[2].elo)>0 then
 		local avgElo1 = teams[1].elo/teams[1].count
 		local avgElo2 = teams[2].elo/teams[2].count
 		local avgEloDiff = avgElo1 - avgElo2
@@ -949,15 +969,16 @@ local function UpdateTeam(teamID)
 	end
 end
 
-local function UpdatePlayer(playerID, info,connecting)
+local function UpdatePlayer(playerID, info, connecting)
 	local controls = playersByPlayerID[playerID]
 	local toSort
+	local name, active, spectator, teamID, allyTeamID, pingTime, cpuUsage, country = spGetPlayerInfo(playerID, false)
 	if not controls then
 		local name, active, spectator, teamID, allyTeamID, pingTime, cpuUsage, country = spGetPlayerInfo(playerID, false)
+		local isSpec = (--[[teamID == 0 and --]]spectator and spGetPlayerRulesParam(playerID, "initiallyPlayingPlayer") ~= 1)
 
-		local isSpec = (teamID == 0 and spectator and spGetPlayerRulesParam(playerID, "initiallyPlayingPlayer") ~= 1)
-
-		if isSpec then
+		-- if isSpec then
+		if not controls then
 			toSort = true
 			controls = GetUserControls(playerID, teamID, allyTeamID, isAiTeam, isDead, isSpec, scrollPanel)
 			listControls[#listControls + 1] = controls
@@ -969,9 +990,20 @@ local function UpdatePlayer(playerID, info,connecting)
 		end
 	end
 
-	toSort = UpdateEntryData(controls.entryData, controls, false, false, info, connecting) or toSort
+	local _toSort, updateColors = UpdateEntryData(controls.entryData, controls, false, false, info, connecting)
 	-- Echo('received ', info and info.name,'sort?',toSort)
-	if toSort then
+	if updateColors then
+		for _, controls in pairs (listControls) do
+			local entryData = controls.entryData
+			controls.textName.font.color = GetPlayerTeamColor(entryData.teamID, entryData.isSpec, entryData.isWaiting)
+			-- controls.textName:SetCaption(controls.textName.caption .. 'A')
+			controls.textName:Invalidate()
+			controls.textTeamID.font.color = GetPlayerTeamColor(entryData.teamID, entryData.isSpec, entryData.isWaiting)
+			-- controls.textTeamID:SetCaption(controls.textTeamID.caption .. 'B')
+			controls.textTeamID:Invalidate()
+		end
+	end
+	if toSort or _toSort then
 		SortEntries()
 	end
 end
@@ -1057,7 +1089,8 @@ local function InitializePlayerlist()
 	for i = 1, #teamList do
 		local teamID = teamList[i]
 		if teamID ~= gaiaTeamID then
-			local _, leaderID, isDead, isAiTeam, _, allyTeamID = spGetTeamInfo(teamID, false)
+			local _, leaderID, isDead, isAiTeam, side, allyTeamID = spGetTeamInfo(teamID, false)
+			Echo(teamID,_,"isAiTeam, leaderID is ", isAiTeam, leaderID)
 			if leaderID < 0 then
 				leaderID = Spring.GetTeamRulesParam(teamID, "initLeaderID") or leaderID
 			end
@@ -1068,7 +1101,6 @@ local function InitializePlayerlist()
 				end
 				
 				local controls = GetUserControls(leaderID, teamID, allyTeamID, isAiTeam, isDead, false, scrollPanel)
-				
 				listControls[#listControls + 1] = controls
 				teamByTeamID[teamID] = controls
 				if leaderID then
@@ -1080,7 +1112,7 @@ local function InitializePlayerlist()
 	-- go through all players, register as entities, assign to teams
 	for i,playerID in ipairs(spGetPlayerList()) do
 		local name, active, spectator, teamID, allyTeamID, pingTime, cpuUsage, country = spGetPlayerInfo(playerID, false)
-		local isSpec = (teamID == 0 and spectator and spGetPlayerRulesParam(playerID, "initiallyPlayingPlayer") ~= 1)
+		local isSpec = (--[[teamID == 0 and--]] spectator and spGetPlayerRulesParam(playerID, "initiallyPlayingPlayer") ~= 1)
 		if isSpec then
 			local controls = GetUserControls(playerID, teamID, allyTeamID, isAiTeam, isDead, isSpec, scrollPanel)
 			listControls[#listControls + 1] = controls
@@ -1148,6 +1180,7 @@ function widget:PlayerChanged(playerID)
 		local ownAllyTeamID = Spring.GetMyAllyTeamID()
 		local ownTeamID = Spring.GetMyTeamID()
 		local updateAll = false
+		-- local changedTeam = ownTeamID ~= myTeamID
 		
 		if mySpectating ~= isSpectating then
 			updateAll = true
@@ -1217,7 +1250,6 @@ function widget:ReceiveUserInfo(info, simulated)
 	local newPlayer = not simulated and not playerInfo[info.name]
 	playerInfo[info.name] = CorrectUserInfo(info)
 
-	-- Echo('received info of player ' .. info.name .. (simulated and ' from widget start' or ''))
 	for i,playerID in ipairs(spGetPlayerList()) do
 		local name, active, spectator, teamID, allyTeamID, pingTime, cpuUsage, country, rank, customKeys = spGetPlayerInfo(playerID, true)
 		if name == info.name then
@@ -1252,9 +1284,11 @@ function widget:Initialize()
 	WG.playerInfo = WG.playerInfo or {}
 	playerInfo = WG.playerInfo
 	InitializePlayerlist()
-	for name,info in pairs(playerInfo) do
-		-- Echo('got player info in Initialize',info.name)
+	for name, info in pairs(playerInfo) do
 		widget:ReceiveUserInfo(info, true)
+	end
+	if not next(playerInfo) then -- in case of cheat and impersonating a team
+		widget:PlayerChanged(Spring.GetMyPlayerID())
 	end
 	Spring.SendCommands("info 0")
 end
