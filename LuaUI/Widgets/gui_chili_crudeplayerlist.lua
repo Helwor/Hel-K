@@ -78,6 +78,7 @@ local CONTINUE = {energy = {time = 0, target = false, next_time = 0}, metal = {t
 local CONTINUE_TIME = 10 -- how long last the continued sharing
 local CONTINUE_FREQUENCY = 1 
 local HIDDEN_STORAGE = 10000
+local UPDATE_TOOLTIP = false -- update metal or energy tooltip
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
 
@@ -710,6 +711,7 @@ local function GetUserControls(playerID, teamID, allyTeamID, isAiTeam, isDead, i
 			function(self)
 				local cur, stor = GetResource(userControls.entryData.teamID, 'metal')
 				self.tooltip = ('M:' .. '%d' .. '/' .. '%d'):format(cur,stor)
+				UPDATE_TOOLTIP = {control = self, next_time = os.clock() + 1}
 			end
 		},
 		OnClick = {function(self)
@@ -748,13 +750,14 @@ local function GetUserControls(playerID, teamID, allyTeamID, isAiTeam, isDead, i
 		OnMouseOver = {
 			function(self)
 				local cur, stor = GetResource(userControls.entryData.teamID, 'energy')
-				self.tooltip = ('E:' .. '%d' .. '/' .. '%d'):format(cur,stor)
+				self.tooltip = ('E:' .. '%d' .. '/' .. '%d'):format(cur, stor)
+				UPDATE_TOOLTIP = {control = self, next_time = os.clock() + 1}
 			end
 		},
 		OnClick = {function(self)
 			GiveResource(userControls.entryData.teamID,"energy")
 			local cur, stor = GetResource(userControls.entryData.teamID, 'energy')
-			self.tooltip = ('E:' .. '%d' .. '/' .. '%d'):format(cur,stor)
+			self.tooltip = ('E:' .. '%d' .. '/' .. '%d'):format(cur, stor)
 
 		end, },
 	}
@@ -1110,7 +1113,7 @@ local function InitializePlayerlist()
 		local teamID = teamList[i]
 		if teamID ~= gaiaTeamID then
 			local _, leaderID, isDead, isAiTeam, side, allyTeamID = spGetTeamInfo(teamID, false)
-			Echo(teamID,_,"isAiTeam, leaderID is ", isAiTeam, leaderID)
+			-- Echo(teamID,_,"isAiTeam, leaderID is ", isAiTeam, leaderID)
 			if leaderID < 0 then
 				leaderID = Spring.GetTeamRulesParam(teamID, "initLeaderID") or leaderID
 			end
@@ -1181,6 +1184,18 @@ options = {
 
 local lastUpdate = 0
 function widget:Update(dt)
+	if UPDATE_TOOLTIP then
+		local now = os.clock()
+		local control = UPDATE_TOOLTIP.control
+		if UPDATE_TOOLTIP.next_time < now then
+			if not control.state.hovered then
+				UPDATE_TOOLTIP = false
+			else
+				control.OnMouseOver[1](control)
+				UPDATE_TOOLTIP.next_time = now + 1
+			end
+		end
+	end
 	for kind, cont in pairs(CONTINUE) do
 		if cont.target then
 			local now = os.clock()
@@ -1286,11 +1301,11 @@ function widget:ReceiveUserInfo(info, simulated)
 		local name, active, spectator, teamID, allyTeamID, pingTime, cpuUsage, country, rank, customKeys = spGetPlayerInfo(playerID, true)
 		if name == info.name then
 			info.elo = customKeys.elo or info.elo
-		-- for k,v in pairs(info) do
-		-- 	if k~='name' then
-		-- 		Echo('=> ' .. k .. ' = ' .. tostring(v))
-		-- 	end
-		-- end
+			-- for k,v in pairs(info) do
+			-- 	if k~='name' then
+			-- 		Echo('=> ' .. k .. ' = ' .. tostring(v))
+			-- 	end
+			-- end
 
 			-- Echo('got playerID: ' .. playerID,'country?',country,info.country)
 			UpdatePlayer(playerID, info,newPlayer)
