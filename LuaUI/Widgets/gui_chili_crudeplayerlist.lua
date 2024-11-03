@@ -79,6 +79,14 @@ local CONTINUE_TIME = 10 -- how long last the continued sharing
 local CONTINUE_FREQUENCY = 1 
 local HIDDEN_STORAGE = 10000
 local UPDATE_TOOLTIP = false -- update metal or energy tooltip
+local res_tooltip_mod_info = table.concat({
+	"Give " .. defaultamount,
+	"Shift: Give " .. 5 * defaultamount,
+	"Ctrl: Give " .. defaultamount / 5,
+	"Alt: Give maximum",
+	"Alt + Shift: Give max for ".. CONTINUE_TIME .." seconds.",
+}, '\n')
+
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
 
@@ -214,6 +222,7 @@ local function GiveResource(target, kind, mod, quiet) -- directly copied from gu
 			Spring.SendCommands("say a: Giving continued " .. kind .. " to " .. name .. " for " .. CONTINUE_TIME .. " seconds.")
 			quiet = true
 		end
+		num = currentResourceValue
 	elseif mod == "all" then
 		num = currentResourceValue
 	elseif mod ~= nil then
@@ -710,14 +719,14 @@ local function GetUserControls(playerID, teamID, allyTeamID, isAiTeam, isDead, i
 		OnMouseOver = {
 			function(self)
 				local cur, stor = GetResource(userControls.entryData.teamID, 'metal')
-				self.tooltip = ('M:' .. '%d' .. '/' .. '%d'):format(cur,stor)
+				self.tooltip = ('M:' .. '%d' .. '/' .. '%d'):format(cur, stor) .. '\n' .. res_tooltip_mod_info
 				UPDATE_TOOLTIP = {control = self, next_time = os.clock() + 1}
 			end
 		},
 		OnClick = {function(self)
 			GiveResource(userControls.entryData.teamID,"metal")
 			local cur, stor = GetResource(userControls.entryData.teamID, 'metal')
-			self.tooltip = ('M:' .. '%d' .. '/' .. '%d'):format(cur,stor)
+			self.tooltip = ('M:' .. '%d' .. '/' .. '%d'):format(cur, stor) .. '\n' .. res_tooltip_mod_info
 
 		end, },
 	}
@@ -750,14 +759,14 @@ local function GetUserControls(playerID, teamID, allyTeamID, isAiTeam, isDead, i
 		OnMouseOver = {
 			function(self)
 				local cur, stor = GetResource(userControls.entryData.teamID, 'energy')
-				self.tooltip = ('E:' .. '%d' .. '/' .. '%d'):format(cur, stor)
+				self.tooltip = ('E:' .. '%d' .. '/' .. '%d'):format(cur, stor) .. '\n' .. res_tooltip_mod_info
 				UPDATE_TOOLTIP = {control = self, next_time = os.clock() + 1}
 			end
 		},
 		OnClick = {function(self)
 			GiveResource(userControls.entryData.teamID,"energy")
 			local cur, stor = GetResource(userControls.entryData.teamID, 'energy')
-			self.tooltip = ('E:' .. '%d' .. '/' .. '%d'):format(cur, stor)
+			self.tooltip = ('E:' .. '%d' .. '/' .. '%d'):format(cur, stor) .. '\n' .. res_tooltip_mod_info
 
 		end, },
 	}
